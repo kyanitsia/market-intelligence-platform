@@ -1,24 +1,37 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 
 import { AuthService } from './auth.service';
 import type { RefreshTokenPayload } from './auth.types';
+import * as secretHash from './crypto/secret-hash';
 import type { User } from '../database/schema';
 
-jest.mock('argon2', () => ({
-  hash: jest.fn(),
-  verify: jest.fn(),
+jest.mock('./crypto/secret-hash', () => ({
+  hashSecret: jest.fn(),
+  verifySecret: jest.fn(),
+  getDummySecretHash: jest.fn(),
 }));
 
-jest.mock('node:crypto', () => ({
-  randomUUID: jest.fn(),
-}));
+jest.mock('node:crypto', () => {
+  const actual = jest.requireActual('node:crypto');
 
-const argon2Hash = argon2.hash as jest.MockedFunction<typeof argon2.hash>;
-const argon2Verify = argon2.verify as jest.MockedFunction<typeof argon2.verify>;
+  return {
+    ...actual,
+    randomUUID: jest.fn(),
+  };
+});
+
+const hashSecret = secretHash.hashSecret as jest.MockedFunction<
+  typeof secretHash.hashSecret
+>;
+const verifySecret = secretHash.verifySecret as jest.MockedFunction<
+  typeof secretHash.verifySecret
+>;
+const getDummySecretHash = secretHash.getDummySecretHash as jest.MockedFunction<
+  typeof secretHash.getDummySecretHash
+>;
 const randomUUIDMock = randomUUID as jest.MockedFunction<typeof randomUUID>;
 
 const now = new Date('2026-01-15T12:00:00.000Z');
@@ -61,8 +74,9 @@ describe('AuthService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    argon2Hash.mockResolvedValue('hashed-token' as never);
-    argon2Verify.mockResolvedValue(true);
+    hashSecret.mockResolvedValue('hashed-token');
+    verifySecret.mockResolvedValue(true);
+    getDummySecretHash.mockResolvedValue('dummy-hash');
     randomUUIDMock
       .mockReturnValueOnce('11111111-1111-1111-1111-111111111111')
       .mockReturnValueOnce('22222222-2222-2222-2222-222222222222');
@@ -114,15 +128,20 @@ describe('AuthService', () => {
   describe('register', () => {
     it('creates a user, session, and token pair', async () => {
       const createdUser = makeUser();
+      const insert = jest.fn().mockImplementation(() => ({
+        values: jest.fn((values: { email?: string }) => {
+          if (values.email) {
+            return {
+              returning: jest.fn().mockResolvedValue([createdUser]),
+            };
+          }
+
+          return Promise.resolve();
+        }),
+      }));
 
       database.transaction.mockImplementation(async (callback) =>
-        callback({
-          insert: jest.fn().mockReturnValue({
-            values: jest.fn().mockReturnValue({
-              returning: jest.fn().mockResolvedValue([createdUser]),
-            }),
-          }),
-        }),
+        callback({ insert }),
       );
 
       const result = await service.register({
@@ -130,7 +149,7 @@ describe('AuthService', () => {
         password: 'password123',
       });
 
-      expect(argon2Hash).toHaveBeenCalledWith('password123');
+      expect(hashSecret).toHaveBeenCalledWith('password123');
       expect(result.refreshToken).toBe('refresh-token');
       expect(result.authentication).toEqual({
         accessToken: 'access-token',
@@ -143,7 +162,7 @@ describe('AuthService', () => {
           createdAt: createdUser.createdAt,
         },
       });
-      expect(database.insert).toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledTimes(2);
     });
 
     it('throws ConflictException when the email already exists', async () => {
@@ -190,7 +209,7 @@ describe('AuthService', () => {
         password: 'password123',
       });
 
-      expect(argon2Verify).toHaveBeenCalledWith(
+      expect(verifySecret).toHaveBeenCalledWith(
         user.passwordHash,
         'password123',
       );
@@ -199,7 +218,7 @@ describe('AuthService', () => {
     });
 
     it('rejects an unknown email without revealing that it is missing', async () => {
-      argon2Verify.mockResolvedValue(false);
+      verifySecret.mockResolvedValue(false);
 
       await expect(
         service.login({
@@ -211,7 +230,7 @@ describe('AuthService', () => {
 
     it('rejects a wrong password', async () => {
       database.select.mockReturnValue(createSelectLimit([makeUser()]));
-      argon2Verify.mockResolvedValue(false);
+      verifySecret.mockResolvedValue(false);
 
       await expect(
         service.login({
@@ -290,7 +309,7 @@ describe('AuthService', () => {
 
       expect(result.refreshToken).toBe('refresh-token');
       expect(result.authentication.accessToken).toBe('access-token');
-      expect(argon2Verify).toHaveBeenCalledWith(
+      expect(verifySecret).toHaveBeenCalledWith(
         session.refreshTokenHash,
         'current-refresh-token',
       );
@@ -307,7 +326,7 @@ describe('AuthService', () => {
 
     it('revokes the family when a rotated token is reused', async () => {
       jwtService.verifyAsync.mockResolvedValue(payload);
-      argon2Verify.mockResolvedValue(false);
+      verifySecret.mockResolvedValue(false);
       const updateWhere = jest.fn().mockResolvedValue(undefined);
       mockRefreshTransaction({ session, updateWhere });
 

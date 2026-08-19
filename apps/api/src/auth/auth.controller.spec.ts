@@ -40,7 +40,13 @@ describe('AuthController', () => {
       logout: jest.fn(),
     };
     configService = {
-      get: jest.fn().mockReturnValue('false'),
+      get: jest.fn((key: string) => {
+        if (key === 'NODE_ENV') {
+          return 'test';
+        }
+
+        return undefined;
+      }),
     };
     controller = new AuthController(
       authService as unknown as AuthService,
@@ -146,5 +152,26 @@ describe('AuthController', () => {
 
     expect(authService.logout).toHaveBeenCalledWith(undefined);
     expect(response.clearCookie).toHaveBeenCalled();
+  });
+
+  it('sets Secure cookies by default in production', async () => {
+    configService.get.mockImplementation((key: string) =>
+      key === 'NODE_ENV' ? 'production' : undefined,
+    );
+    authService.register.mockResolvedValue({
+      authentication,
+      refreshToken: 'refresh-token',
+    });
+
+    await controller.register(
+      { email: 'test@example.com', password: 'password123' },
+      response as Response,
+    );
+
+    expect(response.cookie).toHaveBeenCalledWith(
+      REFRESH_TOKEN_COOKIE,
+      'refresh-token',
+      expect.objectContaining({ secure: true }),
+    );
   });
 });

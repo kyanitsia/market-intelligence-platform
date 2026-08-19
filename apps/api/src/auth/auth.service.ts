@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
-import * as argon2 from 'argon2';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 
@@ -16,6 +15,11 @@ import {
   ACCESS_TOKEN_DEFAULT_TTL,
   REFRESH_TOKEN_DEFAULT_TTL,
 } from './auth.constants';
+import {
+  getDummySecretHash,
+  hashSecret,
+  verifySecret,
+} from './crypto/secret-hash';
 import type {
   AccessTokenPayload,
   AuthenticationResult,
@@ -54,10 +58,10 @@ export class AuthService {
       throw new ConflictException('An account with this email already exists');
     }
 
-    const passwordHash = await argon2.hash(dto.password);
+    const passwordHash = await hashSecret(dto.password);
 
     try {
-      const user = await this.database.transaction(async (transaction) => {
+      return await this.database.transaction(async (transaction) => {
         const [createdUser] = await transaction
           .insert(users)
           .values({
@@ -67,10 +71,8 @@ export class AuthService {
           })
           .returning();
 
-        return createdUser;
+        return this.createAuthenticatedSession(createdUser, transaction);
       });
-
-      return this.createAuthenticatedSession(user);
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
         throw new ConflictException(
@@ -88,16 +90,12 @@ export class AuthService {
 
     // Perform a hash verification even when the account does not
     // exist to reduce observable timing differences.
-    const hashToVerify =
-      user?.passwordHash ??
-      '$argon2id$v=19$m=65536,t=3,p=4$' +
-        'MWYxYzlkNDgyZjJmMDEzYQ$' +
-        'dB2xGGBdZUPM+2n6tERjYBnQ7oYj5W5q4Ew8sUiHeuY';
+    const hashToVerify = user?.passwordHash ?? (await getDummySecretHash());
 
     let validPassword = false;
 
     try {
-      validPassword = await argon2.verify(hashToVerify, dto.password);
+      validPassword = await verifySecret(hashToVerify, dto.password);
     } catch {
       validPassword = false;
     }
@@ -140,7 +138,7 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      const tokenMatches = await argon2.verify(
+      const tokenMatches = await verifySecret(
         session.refreshTokenHash,
         refreshToken,
       );
@@ -177,7 +175,7 @@ export class AuthService {
       await transaction
         .update(authSessions)
         .set({
-          refreshTokenHash: await argon2.hash(tokens.refreshToken),
+          refreshTokenHash: await hashSecret(tokens.refreshToken),
           expiresAt: this.getRefreshTokenExpirationDate(),
           updatedAt: new Date(),
         })
@@ -213,7 +211,10 @@ export class AuthService {
     }
   }
 
-  private async createAuthenticatedSession(user: User): Promise<RefreshResult> {
+  private async createAuthenticatedSession(
+    user: User,
+    executor: Pick<Database, 'insert'> = this.database,
+  ): Promise<RefreshResult> {
     const sessionId = randomUUID();
     const familyId = randomUUID();
 
@@ -223,11 +224,11 @@ export class AuthService {
       familyId,
     });
 
-    await this.database.insert(authSessions).values({
+    await executor.insert(authSessions).values({
       id: sessionId,
       userId: user.id,
       familyId,
-      refreshTokenHash: await argon2.hash(tokens.refreshToken),
+      refreshTokenHash: await hashSecret(tokens.refreshToken),
       expiresAt: this.getRefreshTokenExpirationDate(),
     });
 
@@ -337,8 +338,9 @@ export class AuthService {
     envKey: string,
     fallback: string,
   ): NonNullable<JwtSignOptions['expiresIn']> {
-    return (this.configService.get<string>(envKey) ??
-      fallback) as NonNullable<JwtSignOptions['expiresIn']>;
+    return (this.configService.get<string>(envKey) ?? fallback) as NonNullable<
+      JwtSignOptions['expiresIn']
+    >;
   }
 
   private getRefreshTokenExpirationDate(): Date {

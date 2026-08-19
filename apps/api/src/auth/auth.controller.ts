@@ -7,8 +7,10 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
 import {
@@ -21,6 +23,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -28,6 +31,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
@@ -41,6 +45,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -73,6 +78,7 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @SkipThrottle()
   async logout(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -92,15 +98,26 @@ export class AuthController {
     response: Response,
     refreshToken: string,
   ): void {
-    const secure =
-      this.configService.get<string>('AUTH_COOKIE_SECURE', 'false') === 'true';
-
     response.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
       httpOnly: true,
-      secure,
+      secure: this.isSecureCookie(),
       sameSite: 'strict',
       path: REFRESH_TOKEN_COOKIE_PATH,
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
+  }
+
+  private isSecureCookie(): boolean {
+    const configured = this.configService.get<string>('AUTH_COOKIE_SECURE');
+
+    if (configured === 'true') {
+      return true;
+    }
+
+    if (configured === 'false') {
+      return false;
+    }
+
+    return this.configService.get<string>('NODE_ENV') === 'production';
   }
 }
