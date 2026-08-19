@@ -1,10 +1,11 @@
-import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 
-import {
-  DATABASE,
-  type Database,
-} from '../database/database.types';
+import { DATABASE, type Database } from '../database/database.types';
 import type { HealthResponse } from './health.types';
 
 @Injectable()

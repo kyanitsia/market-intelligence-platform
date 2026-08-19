@@ -1,10 +1,8 @@
-import {
-  Logger,
-  ValidationPipe,
-} from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
+import cookieParser = require('cookie-parser');
 
 import { AppModule } from './app.module';
 
@@ -19,6 +17,7 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api/v1');
 
   app.use(helmet());
+  app.use(cookieParser());
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,12 +31,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(port);
 
-  logger.log(
-    `Application listening on http://localhost:${port}/api/v1`,
-  );
+  logger.log(`Application listening on http://localhost:${port}/api/v1`);
 }
 
-bootstrap().catch((error: unknown) => {
-  logger.error('Failed to start application', error);
-  process.exit(1);
-});
+void bootstrap();
