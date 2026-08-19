@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
 import {
@@ -31,7 +31,6 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
@@ -45,7 +44,6 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,

@@ -49,5 +49,3 @@ export const authSessions = pgTable(
   ],
 );
 
-export type AuthSession = typeof authSessions.$inferSelect;
-export type NewAuthSession = typeof authSessions.$inferInsert;
