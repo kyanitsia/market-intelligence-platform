@@ -1,0 +1,28 @@
+/*
+  Market Intelligence — editor color palette
+  Open this file in Cursor to see color swatches next to each hex.
+  Source of truth for the app theme: ../style.css (@theme)
+*/
+
+:root {
+  /* Surfaces */
+  --surface: #eef3f0;
+  --surface-raised: #ffffff;
+
+  /* Ink / text */
+  --ink: #12201a;
+  --ink-muted: #5c6b64;
+  --ink-soft: #3d4a44;
+
+  /* Lines / borders */
+  --line: #d5ddd8;
+  --line-strong: #aeb9b3;
+
+  /* Brand */
+  --brand: #1a4d3e;
+  --brand-contrast: #ffffff;
+
+  /* Feedback */
+  --danger: #b42318;
+  --success: #0f6b4c;
+}

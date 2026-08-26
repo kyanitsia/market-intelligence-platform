@@ -1,0 +1,15 @@
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/dist
+**/coverage
+**/*.md
+**/.vscode
+**/.idea
+**/terminals
+agent-transcripts
+*.log
+apps/web/src/**/*.spec.ts

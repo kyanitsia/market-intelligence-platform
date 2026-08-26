@@ -1,10 +1,18 @@
 {
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.colorDecorators": true,
+  "editor.semanticHighlighting.enabled": true,
+  "files.associations": {
+    "*.vue": "vue"
+  },
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[vue]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[json]": {
@@ -12,5 +20,33 @@
   },
   "[jsonc]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "vue.server.hybridMode": true,
+  "tailwindCSS.experimental.configFile": "apps/web/src/style.css",
+  "tailwindCSS.classAttributes": ["class", "className"],
+  "tailwindCSS.includeLanguages": {
+    "vue": "html",
+    "typescript": "javascript"
+  },
+  "workbench.colorCustomizations": {
+    "activityBarBadge.background": "#1a4d3e",
+    "activityBarBadge.foreground": "#ffffff",
+    "button.background": "#1a4d3e",
+    "button.foreground": "#ffffff",
+    "button.hoverBackground": "#0f6b4c",
+    "focusBorder": "#1a4d3e",
+    "list.activeSelectionBackground": "#1a4d3e",
+    "list.activeSelectionForeground": "#ffffff",
+    "list.inactiveSelectionBackground": "#d5ddd8",
+    "list.highlightForeground": "#1a4d3e",
+    "progressBar.background": "#0f6b4c",
+    "statusBarItem.remoteBackground": "#1a4d3e",
+    "statusBarItem.remoteForeground": "#ffffff",
+    "tab.activeBorderTop": "#1a4d3e",
+    "textLink.foreground": "#1a4d3e",
+    "textLink.activeForeground": "#0f6b4c"
   }
 }

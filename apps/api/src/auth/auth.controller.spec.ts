@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 import { AuthController } from './auth.controller';
@@ -8,6 +8,8 @@ import {
 } from './auth.constants';
 import type { AuthService } from './auth.service';
 import type { AuthenticationResult } from './auth.types';
+import { AccountLinkingRequiredException } from './exceptions/account-linking-required.exception';
+import type { GoogleOAuthService } from './google/google-oauth.service';
 
 describe('AuthController', () => {
   const authentication: AuthenticationResult = {
@@ -28,9 +30,14 @@ describe('AuthController', () => {
     refresh: jest.Mock;
     logout: jest.Mock;
   };
+  let googleOAuthService: {
+    createAuthorizationUrl: jest.Mock;
+    completeAuthorization: jest.Mock;
+    confirmLink: jest.Mock;
+  };
   let configService: { get: jest.Mock };
   let controller: AuthController;
-  let response: Pick<Response, 'cookie' | 'clearCookie'>;
+  let response: Pick<Response, 'cookie' | 'clearCookie' | 'redirect'>;
 
   beforeEach(() => {
     authService = {
@@ -38,6 +45,11 @@ describe('AuthController', () => {
       login: jest.fn(),
       refresh: jest.fn(),
       logout: jest.fn(),
+    };
+    googleOAuthService = {
+      createAuthorizationUrl: jest.fn(),
+      completeAuthorization: jest.fn(),
+      confirmLink: jest.fn(),
     };
     configService = {
       get: jest.fn((key: string) => {
@@ -50,11 +62,13 @@ describe('AuthController', () => {
     };
     controller = new AuthController(
       authService as unknown as AuthService,
+      googleOAuthService as unknown as GoogleOAuthService,
       configService as never,
     );
     response = {
       cookie: jest.fn(),
       clearCookie: jest.fn(),
+      redirect: jest.fn(),
     };
   });
 
@@ -76,7 +90,7 @@ describe('AuthController', () => {
       expect.objectContaining({
         httpOnly: true,
         secure: false,
-        sameSite: 'strict',
+        sameSite: 'lax',
         path: REFRESH_TOKEN_COOKIE_PATH,
       }),
     );
@@ -119,13 +133,13 @@ describe('AuthController', () => {
     );
   });
 
-  it('rejects refresh without a cookie', async () => {
+  it('returns no content when the refresh cookie is missing', async () => {
     await expect(
       controller.refresh(
         { cookies: {} } as unknown as Request,
         response as Response,
       ),
-    ).rejects.toThrow(new UnauthorizedException('Refresh token is missing'));
+    ).rejects.toMatchObject({ status: HttpStatus.NO_CONTENT });
   });
 
   it('logs out and clears the refresh cookie', async () => {
@@ -141,6 +155,9 @@ describe('AuthController', () => {
     expect(authService.logout).toHaveBeenCalledWith('refresh-token');
     expect(response.clearCookie).toHaveBeenCalledWith(REFRESH_TOKEN_COOKIE, {
       path: REFRESH_TOKEN_COOKIE_PATH,
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
     });
   });
 
@@ -152,6 +169,79 @@ describe('AuthController', () => {
 
     expect(authService.logout).toHaveBeenCalledWith(undefined);
     expect(response.clearCookie).toHaveBeenCalled();
+  });
+
+  it('starts Google OAuth with a redirect URL', () => {
+    googleOAuthService.createAuthorizationUrl.mockReturnValue(
+      'https://accounts.google.com/o/oauth2/v2/auth',
+    );
+
+    expect(controller.startGoogleAuth()).toEqual({
+      url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      statusCode: 302,
+    });
+  });
+
+  it('completes Google OAuth and sets the refresh cookie', async () => {
+    googleOAuthService.completeAuthorization.mockResolvedValue({
+      authentication,
+      refreshToken: 'refresh-token',
+    });
+
+    const result = await controller.googleCallback(
+      'code',
+      'state',
+      undefined,
+      response as Response,
+    );
+
+    expect(result).toEqual(authentication);
+    expect(response.cookie).toHaveBeenCalledWith(
+      REFRESH_TOKEN_COOKIE,
+      'refresh-token',
+      expect.objectContaining({ httpOnly: true }),
+    );
+    expect(response.redirect).not.toHaveBeenCalled();
+  });
+
+  it('redirects to the link URL when Google email already exists', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'GOOGLE_OAUTH_LINK_URL') {
+        return 'http://localhost:5173/auth/link';
+      }
+
+      return undefined;
+    });
+    googleOAuthService.completeAuthorization.mockRejectedValue(
+      new AccountLinkingRequiredException('link-token'),
+    );
+
+    await controller.googleCallback(
+      'code',
+      'state',
+      undefined,
+      response as Response,
+    );
+
+    expect(response.redirect).toHaveBeenCalledWith(
+      'http://localhost:5173/auth/link?linkToken=link-token',
+    );
+  });
+
+  it('confirms Google account linking and sets the refresh cookie', async () => {
+    googleOAuthService.confirmLink.mockResolvedValue({
+      authentication,
+      refreshToken: 'refresh-token',
+    });
+
+    const result = await controller.confirmGoogleLink(
+      { linkToken: 'link-token' },
+      response as Response,
+    );
+
+    expect(result).toEqual(authentication);
+    expect(googleOAuthService.confirmLink).toHaveBeenCalledWith('link-token');
+    expect(response.cookie).toHaveBeenCalled();
   });
 
   it('sets Secure cookies by default in production', async () => {

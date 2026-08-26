@@ -48,4 +48,3 @@ export const authSessions = pgTable(
     index('auth_sessions_expires_at_idx').on(table.expiresAt),
   ],
 );
-

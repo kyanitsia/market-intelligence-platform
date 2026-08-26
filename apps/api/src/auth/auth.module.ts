@@ -6,6 +6,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { GoogleOAuthClient } from './google/google-oauth.client';
+import { GoogleOAuthService } from './google/google-oauth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -29,8 +31,13 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  providers: [
+    AuthService,
+    GoogleOAuthClient,
+    GoogleOAuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+  ],
   exports: [JwtAuthGuard],
 })
 export class AuthModule {}
-

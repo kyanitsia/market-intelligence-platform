@@ -22,8 +22,8 @@ import {
 } from './crypto/secret-hash';
 import type {
   AccessTokenPayload,
-  AuthenticationResult,
   PublicUser,
+  RefreshResult,
   RefreshTokenPayload,
 } from './auth.types';
 import type { LoginDto } from './dto/login.dto';
@@ -31,11 +31,6 @@ import type { RegisterDto } from './dto/register.dto';
 
 interface TokenPair {
   accessToken: string;
-  refreshToken: string;
-}
-
-interface RefreshResult {
-  authentication: AuthenticationResult;
   refreshToken: string;
 }
 
@@ -71,7 +66,7 @@ export class AuthService {
           })
           .returning();
 
-        return this.createAuthenticatedSession(createdUser, transaction);
+        return this.startSession(createdUser, transaction);
       });
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
@@ -105,7 +100,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    return this.createAuthenticatedSession(user);
+    return this.startSession(user);
   }
 
   async refresh(refreshToken: string): Promise<RefreshResult> {
@@ -211,7 +206,7 @@ export class AuthService {
     }
   }
 
-  private async createAuthenticatedSession(
+  async startSession(
     user: User,
     executor: Pick<Database, 'insert'> = this.database,
   ): Promise<RefreshResult> {
