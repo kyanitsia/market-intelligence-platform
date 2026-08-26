@@ -4,8 +4,7 @@ import type {
   UpdateProfileInput,
 } from './types'
 
-export const apiUrl =
-  import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1'
+export const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
 
 export class ApiError extends Error {
   readonly status: number

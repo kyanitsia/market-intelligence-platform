@@ -17,7 +17,8 @@ RUN pnpm --filter api build
 
 FROM base
 ENV NODE_ENV=production
+ENV PORT=8080
 COPY --from=build /app /app
 WORKDIR /app
-EXPOSE 3000
+EXPOSE 8080
 CMD ["sh", "-c", "pnpm --filter api db:migrate && pnpm --filter api start:prod"]
