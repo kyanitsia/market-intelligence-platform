@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1
+#
+# Local Compose uses targets: api-dev | web-dev | api | web
+# Railway must use Dockerfile.api / Dockerfile.web (not this file alone —
+# the final stage is web/nginx, which will break the api service).
 
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
@@ -13,7 +17,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY . .
 RUN pnpm --filter api build
-ARG VITE_API_URL=http://localhost:3000/api/v1
+ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 RUN pnpm --filter web build
 
@@ -27,17 +31,17 @@ COPY . .
 EXPOSE 5173
 CMD ["pnpm", "--filter", "web", "dev", "--host", "0.0.0.0", "--port", "5173"]
 
-# Production API (Railway service: api)
 FROM base AS api
 ENV NODE_ENV=production
+ENV PORT=8080
 COPY --from=build /app /app
 WORKDIR /app
-EXPOSE 3000
+EXPOSE 8080
 CMD ["sh", "-c", "pnpm --filter api db:migrate && pnpm --filter api start:prod"]
 
-# Production web (Railway service: web) — listens on $PORT
 FROM nginx:1.27-alpine AS web
-ENV PORT=80
+ENV PORT=8080
+ENV NGINX_ENVSUBST_FILTER=^PORT$
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080

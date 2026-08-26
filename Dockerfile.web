@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Railway Web service — static nginx + /api proxy to api.railway.internal
+# Railway Web only — do NOT use this for the api service
 
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
@@ -13,14 +13,14 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
-# Relative URL — browser talks to same origin; nginx proxies /api to the API service
 ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 RUN pnpm --filter web build
 
 FROM nginx:1.27-alpine
 ENV PORT=8080
-ENV API_UPSTREAM_PORT=8080
+# Only substitute Railway/nginx listen port — leave $uri etc alone
+ENV NGINX_ENVSUBST_FILTER=^PORT$
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080
