@@ -19,8 +19,10 @@ RUN pnpm --filter web build
 
 FROM nginx:1.27-alpine
 ENV PORT=8080
-# Only substitute Railway/nginx listen port — leave $uri etc alone
-ENV NGINX_ENVSUBST_FILTER=^PORT$
+ARG API_PUBLIC_HOST=api-dev-b66f.up.railway.app
+ENV API_PUBLIC_HOST=$API_PUBLIC_HOST
+# $$ keeps a literal $ in the image (Dockerfile would otherwise eat it)
+ENV NGINX_ENVSUBST_FILTER=^(PORT|API_PUBLIC_HOST)$$
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080

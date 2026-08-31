@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/session'
+import AppAlert from '../components/AppAlert.vue'
+import AppHeader from '../components/AppHeader.vue'
 
-const router = useRouter()
 const auth = useAuth()
 
 const displayName = ref('')
@@ -46,51 +46,34 @@ async function save(): Promise<void> {
     pending.value = false
   }
 }
-
-async function logout(): Promise<void> {
-  await auth.logout()
-  await router.replace('/login')
-}
 </script>
 
 <template>
-  <main class="mx-auto max-w-xl px-4 py-10">
-    <header class="mb-6 flex items-start justify-between gap-4">
-      <div>
-        <p class="text-sm font-medium text-ink-muted">Signed in</p>
-        <h1 class="font-display text-2xl font-semibold tracking-tight text-ink">
-          Profile
-        </h1>
-        <p class="mt-1 text-sm text-ink-muted">{{ auth.state.user?.email }}</p>
-      </div>
-      <button
-        type="button"
-        class="rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-soft"
-        @click="logout"
-      >
-        Log out
-      </button>
-    </header>
+  <main class="mx-auto max-w-2xl px-4 py-8 sm:py-10">
+    <AppHeader
+      title="Profile"
+      subtitle="Manage how you appear across the app."
+    />
 
     <section
-      class="rounded-2xl border border-line bg-surface-raised p-6 shadow-sm"
+      class="rounded-2xl border border-line bg-surface-raised p-5 shadow-sm sm:p-6"
     >
-      <div v-if="auth.state.user?.avatarUrl" class="mb-4">
+      <div v-if="auth.state.user?.avatarUrl" class="mb-5">
         <img
           :src="auth.state.user.avatarUrl"
           alt=""
-          class="h-16 w-16 rounded-full object-cover"
+          class="h-16 w-16 rounded-full object-cover ring-2 ring-line"
         />
       </div>
 
-      <form class="space-y-4" @submit.prevent="save">
+      <form class="space-y-5" @submit.prevent="save">
         <label class="block text-sm font-medium text-ink-soft">
           Display name
           <input
             v-model="displayName"
             type="text"
             maxlength="120"
-            class="mt-1 w-full rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+            class="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
           />
         </label>
 
@@ -101,7 +84,7 @@ async function logout(): Promise<void> {
             type="url"
             maxlength="2048"
             placeholder="https://"
-            class="mt-1 w-full rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+            class="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-ink-muted/70 focus:border-brand focus:ring-2 focus:ring-brand/15"
           />
         </label>
 
@@ -109,20 +92,24 @@ async function logout(): Promise<void> {
           Default currency
           <select
             v-model="defaultCurrency"
-            class="mt-1 w-full rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+            class="mt-1.5 w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
           >
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
           </select>
         </label>
 
-        <p v-if="error" class="text-sm text-danger">{{ error }}</p>
-        <p v-else-if="saved" class="text-sm text-success">Profile saved.</p>
+        <div v-if="error" class="pt-1">
+          <AppAlert variant="error">{{ error }}</AppAlert>
+        </div>
+        <div v-else-if="saved" class="pt-1">
+          <AppAlert variant="success">Profile saved.</AppAlert>
+        </div>
 
         <button
           type="submit"
           :disabled="pending"
-          class="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-contrast disabled:opacity-60"
+          class="rounded-xl bg-brand px-5 py-2.5 text-sm font-medium text-brand-contrast transition hover:bg-brand/90 disabled:opacity-60"
         >
           {{ pending ? 'Saving…' : 'Save profile' }}
         </button>

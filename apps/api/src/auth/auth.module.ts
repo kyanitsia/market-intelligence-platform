@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ThrottlerModule } from '@nestjs/throttler';
 
+import { PortfoliosModule } from '../portfolios/portfolios.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleOAuthClient } from './google/google-oauth.client';
@@ -29,6 +30,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         ],
       }),
     }),
+    forwardRef(() => PortfoliosModule),
   ],
   controllers: [AuthController],
   providers: [

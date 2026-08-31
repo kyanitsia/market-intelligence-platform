@@ -1,5 +1,7 @@
 import type {
   AuthenticationResult,
+  Portfolio,
+  PortfolioNameInput,
   PublicUser,
   UpdateProfileInput,
 } from './types'
@@ -117,6 +119,37 @@ export const api = {
       method: 'PATCH',
       accessToken,
       body: JSON.stringify(input),
+    })
+  },
+
+  listPortfolios(accessToken: string) {
+    return request<Portfolio[]>('/portfolios', { accessToken })
+  },
+
+  createPortfolio(accessToken: string, input: PortfolioNameInput) {
+    return request<Portfolio>('/portfolios', {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify(input),
+    })
+  },
+
+  updatePortfolio(
+    accessToken: string,
+    portfolioId: string,
+    input: PortfolioNameInput,
+  ) {
+    return request<Portfolio>(`/portfolios/${portfolioId}`, {
+      method: 'PATCH',
+      accessToken,
+      body: JSON.stringify(input),
+    })
+  },
+
+  deletePortfolio(accessToken: string, portfolioId: string) {
+    return request<void>(`/portfolios/${portfolioId}`, {
+      method: 'DELETE',
+      accessToken,
     })
   },
 }

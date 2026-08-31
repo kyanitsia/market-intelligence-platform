@@ -4,6 +4,7 @@ import { useAuth } from './auth/session'
 import AuthView from './views/AuthView.vue'
 import GoogleCallbackView from './views/GoogleCallbackView.vue'
 import GoogleLinkView from './views/GoogleLinkView.vue'
+import PortfoliosView from './views/PortfoliosView.vue'
 import ProfileView from './views/ProfileView.vue'
 
 const router = createRouter({
@@ -11,7 +12,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/profile',
+      redirect: '/portfolios',
     },
     {
       path: '/login',
@@ -25,6 +26,11 @@ const router = createRouter({
     {
       path: '/auth/link',
       component: GoogleLinkView,
+    },
+    {
+      path: '/portfolios',
+      component: PortfoliosView,
+      meta: { requiresAuth: true },
     },
     {
       path: '/profile',
@@ -49,7 +55,7 @@ router.beforeEach(async (to) => {
     (to.path === '/login' || to.path === '/auth/callback') &&
     auth.isAuthenticated.value
   ) {
-    return '/profile'
+    return '/portfolios'
   }
 
   return true

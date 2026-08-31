@@ -41,7 +41,9 @@ CMD ["sh", "-c", "pnpm --filter api db:migrate && pnpm --filter api start:prod"]
 
 FROM nginx:1.27-alpine AS web
 ENV PORT=8080
-ENV NGINX_ENVSUBST_FILTER=^PORT$
+ARG API_PUBLIC_HOST=api-dev-b66f.up.railway.app
+ENV API_PUBLIC_HOST=$API_PUBLIC_HOST
+ENV NGINX_ENVSUBST_FILTER=^(PORT|API_PUBLIC_HOST)$$
 COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080

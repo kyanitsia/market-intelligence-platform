@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
@@ -12,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { RefreshResult } from '../auth.types';
 import { DATABASE, type Database } from '../../database/database.types';
 import { oauthIdentities, users, type User } from '../../database/schema';
+import { PortfoliosService } from '../../portfolios/portfolios.service';
 import {
   GOOGLE_LINK_TOKEN_TTL,
   GOOGLE_OAUTH_PROVIDER,
@@ -35,6 +37,8 @@ export class GoogleOAuthService {
     private readonly googleOAuthClient: GoogleOAuthClient,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => PortfoliosService))
+    private readonly portfoliosService: PortfoliosService,
   ) {}
 
   createAuthorizationUrl(): string {
@@ -117,6 +121,11 @@ export class GoogleOAuthService {
         provider: GOOGLE_OAUTH_PROVIDER,
         providerUserId: profile.sub,
       });
+
+      await this.portfoliosService.createDefaultForUser(
+        createdUser.id,
+        transaction,
+      );
 
       return this.authService.startSession(createdUser, transaction);
     });

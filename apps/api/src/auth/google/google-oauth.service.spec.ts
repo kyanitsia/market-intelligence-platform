@@ -68,6 +68,7 @@ describe('GoogleOAuthService', () => {
   };
   let jwtService: { sign: jest.Mock; verify: jest.Mock };
   let configService: { getOrThrow: jest.Mock };
+  let portfoliosService: { createDefaultForUser: jest.Mock };
   let service: GoogleOAuthService;
 
   beforeEach(() => {
@@ -95,12 +96,16 @@ describe('GoogleOAuthService', () => {
     configService = {
       getOrThrow: jest.fn().mockReturnValue('jwt-secret'),
     };
+    portfoliosService = {
+      createDefaultForUser: jest.fn().mockResolvedValue(undefined),
+    };
     service = new GoogleOAuthService(
       database as never,
       authService as never,
       googleOAuthClient as never,
       jwtService as never,
       configService as never,
+      portfoliosService as never,
     );
   });
 
@@ -171,6 +176,10 @@ describe('GoogleOAuthService', () => {
     await expect(
       service.completeAuthorization('code', 'state'),
     ).resolves.toEqual(sessionResult);
+    expect(portfoliosService.createDefaultForUser).toHaveBeenCalledWith(
+      createdUser.id,
+      transaction,
+    );
     expect(authService.startSession).toHaveBeenCalledWith(
       createdUser,
       transaction,

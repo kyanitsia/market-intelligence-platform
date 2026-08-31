@@ -17,3 +17,17 @@ export interface UpdateProfileInput {
   avatarUrl?: string | null
   defaultCurrency?: 'USD' | 'EUR'
 }
+
+export interface Portfolio {
+  id: string
+  name: string
+  version: number
+  visibility: 'PRIVATE' | 'PUBLIC' | 'FOLLOWERS_ONLY'
+  shareMode: 'FULL' | 'ALLOCATION_ONLY' | 'HIDDEN'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PortfolioNameInput {
+  name: string
+}

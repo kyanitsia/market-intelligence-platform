@@ -7,11 +7,13 @@ server {
   gzip on;
   gzip_types text/css application/javascript application/json image/svg+xml;
 
-  # Same-origin API proxy (Railway private DNS). API listens on 8080.
+  # Proxy via API public HTTPS (avoids Railway private IPv4 timeouts).
   location /api/ {
-    proxy_pass http://api.railway.internal:8080/api/;
+    proxy_pass https://${API_PUBLIC_HOST}/api/;
+    proxy_ssl_server_name on;
     proxy_http_version 1.1;
-    proxy_set_header Host $host;
+    proxy_connect_timeout 10s;
+    proxy_set_header Host ${API_PUBLIC_HOST};
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host;

@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
@@ -11,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 
 import { DATABASE, type Database } from '../database/database.types';
 import { authSessions, users, type User } from '../database/schema';
+import { PortfoliosService } from '../portfolios/portfolios.service';
 import {
   ACCESS_TOKEN_DEFAULT_TTL,
   REFRESH_TOKEN_DEFAULT_TTL,
@@ -42,6 +44,8 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => PortfoliosService))
+    private readonly portfoliosService: PortfoliosService,
   ) {}
 
   async register(dto: RegisterDto): Promise<RefreshResult> {
@@ -65,6 +69,11 @@ export class AuthService {
             defaultCurrency: 'USD',
           })
           .returning();
+
+        await this.portfoliosService.createDefaultForUser(
+          createdUser.id,
+          transaction,
+        );
 
         return this.startSession(createdUser, transaction);
       });

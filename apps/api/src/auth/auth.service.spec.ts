@@ -70,6 +70,7 @@ describe('AuthService', () => {
   };
   let jwtService: { signAsync: jest.Mock; verifyAsync: jest.Mock };
   let configService: { getOrThrow: jest.Mock; get: jest.Mock };
+  let portfoliosService: { createDefaultForUser: jest.Mock };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -118,15 +119,20 @@ describe('AuthService', () => {
       get: jest.fn().mockReturnValue(undefined),
     };
 
+    portfoliosService = {
+      createDefaultForUser: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new AuthService(
       database as never,
       jwtService as unknown as JwtService,
       configService as unknown as ConfigService,
+      portfoliosService as never,
     );
   });
 
   describe('register', () => {
-    it('creates a user, session, and token pair', async () => {
+    it('creates a user, default portfolio, session, and token pair', async () => {
       const createdUser = makeUser();
       const insert = jest.fn().mockImplementation(() => ({
         values: jest.fn((values: { email?: string }) => {
@@ -150,6 +156,10 @@ describe('AuthService', () => {
       });
 
       expect(hashSecret).toHaveBeenCalledWith('password123');
+      expect(portfoliosService.createDefaultForUser).toHaveBeenCalledWith(
+        createdUser.id,
+        expect.objectContaining({ insert }),
+      );
       expect(result.refreshToken).toBe('refresh-token');
       expect(result.authentication).toEqual({
         accessToken: 'access-token',
