@@ -81,8 +81,6 @@ export class PortfoliosService {
     portfolioId: string,
     dto: UpdatePortfolioDto,
   ): Promise<PortfolioResponse> {
-    await this.findOneForUser(userId, portfolioId);
-
     const [updated] = await this.database
       .update(portfolios)
       .set({
@@ -106,8 +104,6 @@ export class PortfoliosService {
   }
 
   async softDeleteForUser(userId: string, portfolioId: string): Promise<void> {
-    await this.findOneForUser(userId, portfolioId);
-
     const now = new Date();
     const result = await this.database
       .update(portfolios)

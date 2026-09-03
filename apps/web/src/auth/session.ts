@@ -1,6 +1,6 @@
 import { computed, reactive } from 'vue'
 
-import { api } from '../api/client'
+import { api, registerAuthBridge } from '../api/client'
 import type { AuthenticationResult, PublicUser } from '../api/types'
 
 const state = reactive({
@@ -19,6 +19,11 @@ function clearSession(): void {
   state.accessToken = null
   state.user = null
 }
+
+registerAuthBridge({
+  setSession: applySession,
+  clearSession,
+})
 
 export function useAuth() {
   const isAuthenticated = computed(() => Boolean(state.accessToken && state.user))
@@ -53,8 +58,11 @@ export function useAuth() {
     applySession(await api.login(email, password))
   }
 
-  async function confirmGoogleLink(linkToken: string): Promise<void> {
-    applySession(await api.confirmGoogleLink(linkToken))
+  async function confirmGoogleLink(
+    linkToken: string,
+    password: string,
+  ): Promise<void> {
+    applySession(await api.confirmGoogleLink(linkToken, password))
   }
 
   async function logout(): Promise<void> {

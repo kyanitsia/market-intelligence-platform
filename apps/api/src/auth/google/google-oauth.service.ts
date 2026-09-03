@@ -20,6 +20,10 @@ import {
   GOOGLE_OAUTH_STATE_TTL,
 } from '../auth.constants';
 import { AuthService } from '../auth.service';
+import {
+  getDummySecretHash,
+  verifySecret,
+} from '../crypto/secret-hash';
 import { AccountLinkingRequiredException } from '../exceptions/account-linking-required.exception';
 import { GoogleOAuthClient } from './google-oauth.client';
 import type {
@@ -131,7 +135,10 @@ export class GoogleOAuthService {
     });
   }
 
-  async confirmLink(linkToken: string): Promise<RefreshResult> {
+  async confirmLink(
+    linkToken: string,
+    password: string,
+  ): Promise<RefreshResult> {
     const payload = this.verifyLinkToken(linkToken);
     const existingIdentity = await this.findIdentity(payload.googleSub);
 
@@ -146,6 +153,8 @@ export class GoogleOAuthService {
         throw new UnauthorizedException();
       }
 
+      await this.verifyAccountPassword(user, password);
+
       return this.authService.startSession(user);
     }
 
@@ -158,6 +167,8 @@ export class GoogleOAuthService {
     if (!user) {
       throw new BadRequestException('Account no longer exists');
     }
+
+    await this.verifyAccountPassword(user, password);
 
     await this.database.insert(oauthIdentities).values({
       userId: user.id,
@@ -189,6 +200,25 @@ export class GoogleOAuthService {
       .limit(1);
 
     return this.authService.startSession(updatedUser ?? user);
+  }
+
+  private async verifyAccountPassword(
+    user: User,
+    password: string,
+  ): Promise<void> {
+    const hashToVerify = user.passwordHash ?? (await getDummySecretHash());
+
+    let validPassword = false;
+
+    try {
+      validPassword = await verifySecret(hashToVerify, password);
+    } catch {
+      validPassword = false;
+    }
+
+    if (!user.passwordHash || !validPassword) {
+      throw new UnauthorizedException('Invalid password');
+    }
   }
 
   private async findIdentity(googleSub: string) {

@@ -1,9 +1,23 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 
 import type { User } from '../../database/schema';
+import * as secretHash from '../crypto/secret-hash';
 import { AccountLinkingRequiredException } from '../exceptions/account-linking-required.exception';
 import { GoogleOAuthService } from './google-oauth.service';
 import type { GoogleProfile } from './google-oauth.types';
+
+jest.mock('../crypto/secret-hash', () => ({
+  hashSecret: jest.fn(),
+  verifySecret: jest.fn(),
+  getDummySecretHash: jest.fn(),
+}));
+
+const verifySecret = secretHash.verifySecret as jest.MockedFunction<
+  typeof secretHash.verifySecret
+>;
+const getDummySecretHash = secretHash.getDummySecretHash as jest.MockedFunction<
+  typeof secretHash.getDummySecretHash
+>;
 
 const now = new Date('2026-01-15T12:00:00.000Z');
 
@@ -72,6 +86,9 @@ describe('GoogleOAuthService', () => {
   let service: GoogleOAuthService;
 
   beforeEach(() => {
+    verifySecret.mockResolvedValue(true);
+    getDummySecretHash.mockResolvedValue('dummy-hash');
+
     database = {
       select: jest.fn(),
       insert: jest.fn(),
@@ -234,11 +251,33 @@ describe('GoogleOAuthService', () => {
       }),
     });
 
-    await expect(service.confirmLink('link-token')).resolves.toEqual(
-      sessionResult,
-    );
+    await expect(
+      service.confirmLink('link-token', 'password123'),
+    ).resolves.toEqual(sessionResult);
+    expect(verifySecret).toHaveBeenCalledWith('stored-hash', 'password123');
     expect(database.insert).toHaveBeenCalled();
     expect(authService.startSession).toHaveBeenCalledWith(updatedUser);
+  });
+
+  it('rejects account linking with an invalid password', async () => {
+    const user = makeUser();
+
+    jwtService.verify.mockReturnValue({
+      type: 'google-link',
+      email: 'test@example.com',
+      googleSub: profile.sub,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+    });
+    database.select
+      .mockReturnValueOnce(createSelectLimit([]))
+      .mockReturnValueOnce(createSelectLimit([user]));
+    verifySecret.mockResolvedValue(false);
+
+    await expect(
+      service.confirmLink('link-token', 'wrong-password'),
+    ).rejects.toThrow(new UnauthorizedException('Invalid password'));
+    expect(authService.startSession).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid link token', async () => {
@@ -246,8 +285,8 @@ describe('GoogleOAuthService', () => {
       throw new Error('invalid');
     });
 
-    await expect(service.confirmLink('bad-token')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.confirmLink('bad-token', 'password123'),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

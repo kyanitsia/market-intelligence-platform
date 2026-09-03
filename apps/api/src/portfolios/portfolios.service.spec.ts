@@ -91,7 +91,6 @@ describe('PortfoliosService', () => {
   it('updates a portfolio name', async () => {
     const updated = { ...portfolio, name: 'Growth' };
     const database = createDatabase({
-      selectRows: [portfolio],
       updateRows: [updated],
     });
     const service = new PortfoliosService(database as never);
@@ -101,9 +100,17 @@ describe('PortfoliosService', () => {
     ).resolves.toEqual(updated);
   });
 
+  it('throws when updating a missing portfolio', async () => {
+    const database = createDatabase({ updateRows: [] });
+    const service = new PortfoliosService(database as never);
+
+    await expect(
+      service.updateForUser('user-id', 'missing-id', { name: 'Growth' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('soft-deletes a portfolio', async () => {
     const database = createDatabase({
-      selectRows: [portfolio],
       updateRows: [{ id: 'portfolio-id' }],
     });
     const set = jest.fn().mockReturnValue({
@@ -124,6 +131,15 @@ describe('PortfoliosService', () => {
         updatedAt: expect.any(Date),
       }),
     );
+  });
+
+  it('throws when soft-deleting a missing portfolio', async () => {
+    const database = createDatabase({ updateRows: [] });
+    const service = new PortfoliosService(database as never);
+
+    await expect(
+      service.softDeleteForUser('user-id', 'missing-id'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('creates the default portfolio for a new user', async () => {

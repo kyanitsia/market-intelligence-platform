@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   HttpCode,
-  HttpException,
   HttpStatus,
   Post,
   Query,
@@ -100,7 +99,10 @@ export class AuthController {
     @Body() dto: ConfirmGoogleLinkDto,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthenticationResult> {
-    const result = await this.googleOAuthService.confirmLink(dto.linkToken);
+    const result = await this.googleOAuthService.confirmLink(
+      dto.linkToken,
+      dto.password,
+    );
 
     this.setRefreshTokenCookie(response, result.refreshToken);
 
@@ -141,7 +143,7 @@ export class AuthController {
     const refreshToken = request.cookies?.[REFRESH_TOKEN_COOKIE];
 
     if (typeof refreshToken !== 'string' || !refreshToken) {
-      throw new HttpException('', HttpStatus.NO_CONTENT);
+      throw new UnauthorizedException('Refresh token is missing');
     }
 
     const result = await this.authService.refresh(refreshToken);

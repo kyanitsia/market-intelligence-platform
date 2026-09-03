@@ -1,4 +1,4 @@
-import { HttpStatus, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
 import { AuthController } from './auth.controller';
@@ -133,13 +133,13 @@ describe('AuthController', () => {
     );
   });
 
-  it('returns no content when the refresh cookie is missing', async () => {
+  it('returns 401 when the refresh cookie is missing', async () => {
     await expect(
       controller.refresh(
         { cookies: {} } as unknown as Request,
         response as Response,
       ),
-    ).rejects.toMatchObject({ status: HttpStatus.NO_CONTENT });
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('logs out and clears the refresh cookie', async () => {
@@ -235,12 +235,15 @@ describe('AuthController', () => {
     });
 
     const result = await controller.confirmGoogleLink(
-      { linkToken: 'link-token' },
+      { linkToken: 'link-token', password: 'password123' },
       response as Response,
     );
 
     expect(result).toEqual(authentication);
-    expect(googleOAuthService.confirmLink).toHaveBeenCalledWith('link-token');
+    expect(googleOAuthService.confirmLink).toHaveBeenCalledWith(
+      'link-token',
+      'password123',
+    );
     expect(response.cookie).toHaveBeenCalled();
   });
 
