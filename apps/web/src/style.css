@@ -1,0 +1,64 @@
+@import 'tailwindcss';
+
+/*
+  Color palette — change tokens here; components use semantic utilities
+  (bg-surface, text-ink-muted, bg-brand, …).
+  Editor swatches: also see ./palette.css
+*/
+@theme {
+  --color-surface: #eef3f0;
+  --color-surface-raised: #ffffff;
+  --color-ink: #12201a;
+  --color-ink-muted: #5c6b64;
+  --color-ink-soft: #3d4a44;
+  --color-line: #d5ddd8;
+  --color-line-strong: #aeb9b3;
+  --color-brand: #1a4d3e;
+  --color-brand-contrast: #ffffff;
+  --color-danger: #b42318;
+  --color-success: #0f6b4c;
+  --font-sans: 'Source Sans 3', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+}
+
+@layer base {
+  button:not(:disabled),
+  a[href] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 220ms ease-out;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}

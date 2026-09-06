@@ -11,6 +11,81 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d market_intelligence"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-dev
+    container_name: market-intelligence-api
+    restart: unless-stopped
+    env_file:
+      - path: apps/api/.env.example
+        required: false
+      - path: apps/api/.env
+        required: false
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/market_intelligence
+      CORS_ORIGIN: http://localhost:5173
+      AUTH_COOKIE_SECURE: "false"
+      GOOGLE_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+      GOOGLE_OAUTH_SUCCESS_URL: http://localhost:5173/auth/callback
+      GOOGLE_OAUTH_LINK_URL: http://localhost:5173/auth/link
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./apps/api/drizzle:/app/apps/api/drizzle
+      - ./apps/api/drizzle.config.ts:/app/apps/api/drizzle.config.ts
+      - ./apps/api/nest-cli.json:/app/apps/api/nest-cli.json
+      - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json
+      - ./apps/api/tsconfig.build.json:/app/apps/api/tsconfig.build.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web-dev
+    container_name: market-intelligence-web
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+      - ./apps/web/index.html:/app/apps/web/index.html
+      - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts
+      - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json
+      - ./apps/web/tsconfig.app.json:/app/apps/web/tsconfig.app.json
+      - ./apps/web/tsconfig.node.json:/app/apps/web/tsconfig.node.json
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   postgres_data:

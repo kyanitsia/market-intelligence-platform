@@ -15,6 +15,13 @@
       "when": 1785943084215,
       "tag": "0001_harsh_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787159104658,
+      "tag": "0002_majestic_venus",
+      "breakpoints": true
     }
   ]
 }

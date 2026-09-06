@@ -1,4 +1,8 @@
 .env
 apps/api/.env
+apps/web/.env
 node_modules/
+.railway-*-vars.json
+.railway-mutation.graphql
+
 
