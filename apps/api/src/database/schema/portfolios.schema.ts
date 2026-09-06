@@ -71,6 +71,8 @@ export const holdings = pgTable(
       precision: 30,
       scale: 12,
     }).notNull(),
+
+    acquiredOn: date('acquired_on').notNull(),
   },
   (table) => [
     uniqueIndex('holdings_portfolio_asset_unique').on(
@@ -81,6 +83,8 @@ export const holdings = pgTable(
     index('holdings_portfolio_id_idx').on(table.portfolioId),
   ],
 );
+
+export type Holding = typeof holdings.$inferSelect;
 
 export const portfolioSnapshots = pgTable(
   'portfolio_snapshots',

@@ -1,5 +1,7 @@
 import type {
   AuthenticationResult,
+  CreateHoldingInput,
+  Holding,
   Portfolio,
   PortfolioNameInput,
   PublicUser,
@@ -220,10 +222,32 @@ export const api = {
     })
   },
 
+  getPortfolio(accessToken: string, portfolioId: string) {
+    return request<Portfolio>(`/portfolios/${portfolioId}`, { accessToken })
+  },
+
   deletePortfolio(accessToken: string, portfolioId: string) {
     return request<void>(`/portfolios/${portfolioId}`, {
       method: 'DELETE',
       accessToken,
+    })
+  },
+
+  listHoldings(accessToken: string, portfolioId: string) {
+    return request<Holding[]>(`/portfolios/${portfolioId}/holdings`, {
+      accessToken,
+    })
+  },
+
+  createHolding(
+    accessToken: string,
+    portfolioId: string,
+    input: CreateHoldingInput,
+  ) {
+    return request<Holding>(`/portfolios/${portfolioId}/holdings`, {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify(input),
     })
   },
 }

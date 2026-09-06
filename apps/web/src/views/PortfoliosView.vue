@@ -364,9 +364,12 @@ onMounted(() => {
               </div>
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <p class="truncate text-base font-semibold text-ink">
+                  <router-link
+                    :to="`/portfolios/${portfolio.id}`"
+                    class="truncate text-base font-semibold text-ink hover:text-brand"
+                  >
                     {{ portfolio.name }}
-                  </p>
+                  </router-link>
                   <span
                     v-if="portfolio.name === 'Default'"
                     class="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-brand"
@@ -381,6 +384,12 @@ onMounted(() => {
             </div>
 
             <div class="flex gap-2 sm:shrink-0">
+              <router-link
+                :to="`/portfolios/${portfolio.id}`"
+                class="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-brand-contrast transition hover:bg-brand/90"
+              >
+                Holdings
+              </router-link>
               <button
                 type="button"
                 class="rounded-xl border border-line-strong px-4 py-2 text-sm text-ink-soft transition hover:border-brand/30 hover:text-ink"

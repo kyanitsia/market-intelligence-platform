@@ -31,3 +31,37 @@ export interface Portfolio {
 export interface PortfolioNameInput {
   name: string
 }
+
+export type AssetType = 'CRYPTO' | 'STOCK' | 'ETF'
+
+export interface HoldingAsset {
+  id: string
+  symbol: string
+  name: string
+  assetType: AssetType
+  externalProvider: string
+  externalId: string
+  status: 'ACTIVE' | 'INACTIVE'
+}
+
+export interface Holding {
+  id: string
+  portfolioId: string
+  quantity: string
+  avgCostBasis: string
+  acquiredOn: string
+  asset: HoldingAsset
+}
+
+export interface CreateHoldingInput {
+  asset: {
+    symbol: string
+    externalId: string
+    assetType: AssetType
+    name?: string
+    externalProvider?: string
+  }
+  quantity: string
+  avgCostBasis: string
+  acquiredOn: string
+}

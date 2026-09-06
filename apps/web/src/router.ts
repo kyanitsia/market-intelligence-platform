@@ -4,6 +4,7 @@ import { useAuth } from './auth/session'
 import AuthView from './views/AuthView.vue'
 import GoogleCallbackView from './views/GoogleCallbackView.vue'
 import GoogleLinkView from './views/GoogleLinkView.vue'
+import PortfolioDetailView from './views/PortfolioDetailView.vue'
 import PortfoliosView from './views/PortfoliosView.vue'
 import ProfileView from './views/ProfileView.vue'
 
@@ -30,6 +31,11 @@ const router = createRouter({
     {
       path: '/portfolios',
       component: PortfoliosView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/portfolios/:id',
+      component: PortfolioDetailView,
       meta: { requiresAuth: true },
     },
     {
