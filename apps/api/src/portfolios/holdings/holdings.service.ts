@@ -12,6 +12,7 @@ import {
   assets,
   holdings,
   portfolios,
+  transactions,
   type Asset,
   type Holding,
 } from '../../database/schema';
@@ -23,9 +24,12 @@ import {
   POSTGRES_UNIQUE_VIOLATION,
   UNIQUE_VIOLATION_CAUSE_MAX_DEPTH,
 } from './holdings.constants';
+import { PortfolioValuationService } from '../valuation/portfolio-valuation.service';
+import { valueHoldings } from '../valuation/value-holdings';
 import {
   DEFAULT_ASSET_PROVIDERS,
   type HoldingAssetInput,
+  type HoldingAssetResponse,
   type HoldingResponse,
 } from './holdings.types';
 
@@ -34,6 +38,7 @@ export class HoldingsService {
   constructor(
     @Inject(DATABASE)
     private readonly database: Database,
+    private readonly valuation: PortfolioValuationService,
   ) {}
 
   async listForUser(
@@ -42,17 +47,9 @@ export class HoldingsService {
   ): Promise<HoldingResponse[]> {
     await this.requirePortfolio(userId, portfolioId);
 
-    const rows = await this.database
-      .select({
-        holding: holdings,
-        asset: assets,
-      })
-      .from(holdings)
-      .innerJoin(assets, eq(holdings.assetId, assets.id))
-      .where(eq(holdings.portfolioId, portfolioId))
-      .orderBy(asc(assets.symbol));
+    const rows = await this.loadRows(portfolioId);
 
-    return rows.map((row) => this.toResponse(row.holding, row.asset));
+    return this.valuation.valueRows(userId, rows);
   }
 
   async createForUser(
@@ -66,20 +63,38 @@ export class HoldingsService {
     const asset = await this.findOrCreateAsset(dto.asset);
 
     try {
-      const [created] = await this.database
-        .insert(holdings)
-        .values({
+      const created = await this.database.transaction(async (tx) => {
+        const [holding] = await tx
+          .insert(holdings)
+          .values({
+            portfolioId,
+            assetId: asset.id,
+            quantity: dto.quantity,
+            avgCostBasis: dto.avgCostBasis,
+            acquiredOn: dto.acquiredOn,
+          })
+          .returning();
+
+        await tx.insert(transactions).values({
           portfolioId,
           assetId: asset.id,
+          type: 'BUY',
           quantity: dto.quantity,
-          avgCostBasis: dto.avgCostBasis,
-          acquiredOn: dto.acquiredOn,
-        })
-        .returning();
+          price: dto.avgCostBasis,
+          occurredAt: new Date(`${dto.acquiredOn}T00:00:00.000Z`),
+        });
+
+        return holding;
+      });
 
       await this.touchPortfolio(userId, portfolioId);
 
-      return this.toResponse(created, asset);
+      const valued = await this.listForUser(userId, portfolioId);
+      const createdResponse = valued.find(
+        (holding) => holding.id === created.id,
+      );
+
+      return createdResponse ?? this.toResponse(created, asset);
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
         throw new ConflictException('This asset is already in the portfolio');
@@ -87,6 +102,23 @@ export class HoldingsService {
 
       throw error;
     }
+  }
+
+  private async loadRows(portfolioId: string) {
+    const rows = await this.database
+      .select({
+        holding: holdings,
+        asset: assets,
+      })
+      .from(holdings)
+      .innerJoin(assets, eq(holdings.assetId, assets.id))
+      .where(eq(holdings.portfolioId, portfolioId))
+      .orderBy(asc(assets.symbol));
+
+    return rows.map((row) => ({
+      holding: row.holding,
+      asset: this.toAssetResponse(row.asset),
+    }));
   }
 
   private async requirePortfolio(
@@ -235,23 +267,30 @@ export class HoldingsService {
     };
   }
 
-  private toResponse(holding: Holding, asset: Asset): HoldingResponse {
+  private toAssetResponse(asset: Asset): HoldingAssetResponse {
     return {
-      id: holding.id,
-      portfolioId: holding.portfolioId,
-      quantity: holding.quantity,
-      avgCostBasis: holding.avgCostBasis,
-      acquiredOn: holding.acquiredOn,
-      asset: {
-        id: asset.id,
-        symbol: asset.symbol,
-        name: asset.name,
-        assetType: asset.assetType,
-        externalProvider: asset.externalProvider,
-        externalId: asset.externalId,
-        status: asset.status,
-      },
+      id: asset.id,
+      symbol: asset.symbol,
+      name: asset.name,
+      assetType: asset.assetType,
+      externalProvider: asset.externalProvider,
+      externalId: asset.externalId,
+      status: asset.status,
     };
+  }
+
+  private toResponse(holding: Holding, asset: Asset): HoldingResponse {
+    const valued = valueHoldings(
+      [{ holding, asset: this.toAssetResponse(asset) }],
+      new Map(),
+      {
+        currency: 'USD',
+        now: new Date(),
+        staleAfterMs: 0,
+      },
+    );
+
+    return valued.holdings[0];
   }
 
   private isUniqueViolation(error: unknown): boolean {

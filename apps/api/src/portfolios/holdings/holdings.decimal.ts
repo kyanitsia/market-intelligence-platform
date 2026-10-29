@@ -36,6 +36,12 @@ export function assertCostBasis(value: string): void {
   }
 }
 
+export function assertPrice(value: string): void {
+  if (!isDecimalString(value)) {
+    throw new BadRequestException('price must be greater than or equal to 0');
+  }
+}
+
 export function isIsoDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;

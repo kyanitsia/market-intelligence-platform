@@ -47,6 +47,17 @@ describe('HoldingsService', () => {
       externalId: asset.externalId,
       status: asset.status,
     },
+    valuation: {
+      currency: 'USD',
+      price: null,
+      priceAsOf: null,
+      stale: true,
+      currentValue: null,
+      costBasis: '63000',
+      unrealizedPnl: null,
+      unrealizedPnlPct: null,
+      allocationPct: null,
+    },
   };
 
   const dto: CreateHoldingDto = {
@@ -109,7 +120,7 @@ describe('HoldingsService', () => {
       };
     });
 
-    return {
+    const database = {
       select,
       insert,
       update: jest.fn().mockReturnValue({
@@ -117,6 +128,52 @@ describe('HoldingsService', () => {
           where: jest.fn().mockResolvedValue(undefined),
         }),
       }),
+      transaction: jest.fn(),
+    };
+
+    database.transaction.mockImplementation(
+      async (callback: (executor: typeof database) => Promise<unknown>) =>
+        callback(database),
+    );
+
+    return database;
+  }
+
+  function createValuation() {
+    return {
+      valueRows: jest.fn(
+        async (
+          _userId: string,
+          rows: Array<{ holding: typeof holding; asset: typeof asset }>,
+        ) =>
+          rows.map((row) => ({
+            id: row.holding.id,
+            portfolioId: row.holding.portfolioId,
+            quantity: row.holding.quantity,
+            avgCostBasis: row.holding.avgCostBasis,
+            acquiredOn: row.holding.acquiredOn,
+            asset: {
+              id: row.asset.id,
+              symbol: row.asset.symbol,
+              name: row.asset.name,
+              assetType: row.asset.assetType,
+              externalProvider: row.asset.externalProvider,
+              externalId: row.asset.externalId,
+              status: row.asset.status,
+            },
+            valuation: {
+              currency: 'USD' as const,
+              price: null,
+              priceAsOf: null,
+              stale: true,
+              currentValue: null,
+              costBasis: '63000',
+              unrealizedPnl: null,
+              unrealizedPnlPct: null,
+              allocationPct: null,
+            },
+          })),
+      ),
     };
   }
 
@@ -124,7 +181,8 @@ describe('HoldingsService', () => {
     const database = createDatabase({
       selectQueue: [[{ id: portfolioId }], [{ holding, asset }]],
     });
-    const service = new HoldingsService(database as never);
+    const valuation = createValuation();
+    const service = new HoldingsService(database as never, valuation as never);
 
     await expect(service.listForUser(userId, portfolioId)).resolves.toEqual([
       holdingResponse,
@@ -135,7 +193,10 @@ describe('HoldingsService', () => {
     const database = createDatabase({
       selectQueue: [[]],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.listForUser(userId, 'missing-id'),
@@ -144,7 +205,13 @@ describe('HoldingsService', () => {
 
   it('creates a holding and catalogs the asset by symbol and external id', async () => {
     const database = createDatabase({
-      selectQueue: [[{ id: portfolioId }], [], []],
+      selectQueue: [
+        [{ id: portfolioId }],
+        [],
+        [],
+        [{ id: portfolioId }],
+        [{ holding, asset }],
+      ],
       insertQueue: [[asset], [holding]],
     });
     const values = jest.fn().mockReturnValue({
@@ -153,11 +220,16 @@ describe('HoldingsService', () => {
     const holdingValues = jest.fn().mockReturnValue({
       returning: jest.fn().mockResolvedValue([holding]),
     });
+    const buyValues = jest.fn().mockResolvedValue(undefined);
     database.insert
       .mockReturnValueOnce({ values })
-      .mockReturnValueOnce({ values: holdingValues });
+      .mockReturnValueOnce({ values: holdingValues })
+      .mockReturnValueOnce({ values: buyValues });
 
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, dto),
@@ -177,25 +249,45 @@ describe('HoldingsService', () => {
       avgCostBasis: '42000',
       acquiredOn: '2024-03-01',
     });
+    expect(buyValues).toHaveBeenCalledWith({
+      portfolioId,
+      assetId: asset.id,
+      type: 'BUY',
+      quantity: '1.5',
+      price: '42000',
+      occurredAt: new Date('2024-03-01T00:00:00.000Z'),
+    });
   });
 
   it('reuses an existing catalog asset', async () => {
     const database = createDatabase({
-      selectQueue: [[{ id: portfolioId }], [asset], [asset]],
+      selectQueue: [
+        [{ id: portfolioId }],
+        [asset],
+        [asset],
+        [{ id: portfolioId }],
+        [{ holding, asset }],
+      ],
       insertQueue: [[holding]],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, dto),
     ).resolves.toEqual(holdingResponse);
 
-    expect(database.insert).toHaveBeenCalledTimes(1);
+    expect(database.insert).toHaveBeenCalledTimes(2);
   });
 
   it('rejects quantity that is not greater than 0', async () => {
     const database = createDatabase({});
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, {
@@ -207,7 +299,10 @@ describe('HoldingsService', () => {
 
   it('rejects a negative cost basis', async () => {
     const database = createDatabase({});
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, {
@@ -220,10 +315,19 @@ describe('HoldingsService', () => {
   it('accepts a zero cost basis', async () => {
     const zeroCostHolding = { ...holding, avgCostBasis: '0' };
     const database = createDatabase({
-      selectQueue: [[{ id: portfolioId }], [asset], [asset]],
+      selectQueue: [
+        [{ id: portfolioId }],
+        [asset],
+        [asset],
+        [{ id: portfolioId }],
+        [{ holding: zeroCostHolding, asset }],
+      ],
       insertQueue: [[zeroCostHolding]],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, {
@@ -240,7 +344,10 @@ describe('HoldingsService', () => {
     const database = createDatabase({
       selectQueue: [[]],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, 'missing-id', dto),
@@ -255,21 +362,24 @@ describe('HoldingsService', () => {
         [asset],
       ],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, dto),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('defaults STOCK assets to the yahoo provider', async () => {
+  it('defaults STOCK assets to the finnhub provider', async () => {
     const stockAsset = {
       ...asset,
       id: 'stock-asset-id',
       symbol: 'AAPL',
       name: 'Apple',
       assetType: 'STOCK' as const,
-      externalProvider: 'yahoo',
+      externalProvider: 'finnhub',
       externalId: 'AAPL',
     };
     const stockHolding = {
@@ -282,14 +392,25 @@ describe('HoldingsService', () => {
     const holdingValues = jest.fn().mockReturnValue({
       returning: jest.fn().mockResolvedValue([stockHolding]),
     });
+    const buyValues = jest.fn().mockResolvedValue(undefined);
     const database = createDatabase({
-      selectQueue: [[{ id: portfolioId }], [], []],
+      selectQueue: [
+        [{ id: portfolioId }],
+        [],
+        [],
+        [{ id: portfolioId }],
+        [{ holding: stockHolding, asset: stockAsset }],
+      ],
     });
     database.insert
       .mockReturnValueOnce({ values })
-      .mockReturnValueOnce({ values: holdingValues });
+      .mockReturnValueOnce({ values: holdingValues })
+      .mockReturnValueOnce({ values: buyValues });
 
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await service.createForUser(userId, portfolioId, {
       ...dto,
@@ -305,7 +426,7 @@ describe('HoldingsService', () => {
       symbol: 'AAPL',
       name: 'Apple',
       assetType: 'STOCK',
-      externalProvider: 'yahoo',
+      externalProvider: 'finnhub',
       externalId: 'AAPL',
     });
   });
@@ -317,7 +438,10 @@ describe('HoldingsService', () => {
         { message: 'Failed query', cause: { code: POSTGRES_UNIQUE_VIOLATION } },
       ],
     });
-    const service = new HoldingsService(database as never);
+    const service = new HoldingsService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.createForUser(userId, portfolioId, dto),

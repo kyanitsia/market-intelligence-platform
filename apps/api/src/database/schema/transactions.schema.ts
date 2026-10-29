@@ -56,3 +56,5 @@ export const transactions = pgTable(
     ),
   ],
 );
+
+export type Transaction = typeof transactions.$inferSelect;

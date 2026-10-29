@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -30,7 +30,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         ],
       }),
     }),
-    forwardRef(() => PortfoliosModule),
+    PortfoliosModule,
   ],
   controllers: [AuthController],
   providers: [

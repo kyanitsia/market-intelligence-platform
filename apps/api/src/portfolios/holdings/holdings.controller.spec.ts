@@ -24,6 +24,17 @@ describe('HoldingsController', () => {
       externalId: 'bitcoin',
       status: 'ACTIVE',
     },
+    valuation: {
+      currency: 'USD',
+      price: null,
+      priceAsOf: null,
+      stale: true,
+      currentValue: null,
+      costBasis: '63000',
+      unrealizedPnl: null,
+      unrealizedPnlPct: null,
+      allocationPct: null,
+    },
   };
 
   const dto = {

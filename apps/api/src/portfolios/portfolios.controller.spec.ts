@@ -17,6 +17,15 @@ describe('PortfoliosController', () => {
     shareMode: 'HIDDEN',
     createdAt: new Date('2026-01-15T12:00:00.000Z'),
     updatedAt: new Date('2026-01-15T12:00:00.000Z'),
+    valuation: {
+      currency: 'USD',
+      currentValue: '0',
+      costBasis: '0',
+      unrealizedPnl: '0',
+      unrealizedPnlPct: null,
+      allocationPct: null,
+      stale: false,
+    },
   };
 
   let portfoliosService: {

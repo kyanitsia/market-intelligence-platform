@@ -1,3 +1,5 @@
+import type { HoldingValuation } from '../valuation/valuation.types';
+
 export const ASSET_TYPES = ['CRYPTO', 'STOCK', 'ETF'] as const;
 
 export type AssetType = (typeof ASSET_TYPES)[number];
@@ -8,8 +10,8 @@ export type AssetStatus = (typeof ASSET_STATUSES)[number];
 
 export const DEFAULT_ASSET_PROVIDERS: Record<AssetType, string> = {
   CRYPTO: 'coingecko',
-  STOCK: 'yahoo',
-  ETF: 'yahoo',
+  STOCK: 'finnhub',
+  ETF: 'finnhub',
 };
 
 export type HoldingAssetInput = {
@@ -37,4 +39,5 @@ export type HoldingResponse = {
   avgCostBasis: string;
   acquiredOn: string;
   asset: HoldingAssetResponse;
+  valuation: HoldingValuation;
 };

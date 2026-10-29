@@ -42,12 +42,73 @@ function showSuccess(message: string): void {
   }, 3200)
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(value))
+function formatMoney(value: string | null, currency: string): string {
+  if (value === null) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return value
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 2,
+  }).format(numeric)
+}
+
+function formatSignedMoney(value: string | null, currency: string): string {
+  if (value === null) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return value
+  }
+
+  const formatted = formatMoney(Math.abs(numeric).toString(), currency)
+
+  if (numeric > 0) {
+    return `+${formatted}`
+  }
+
+  if (numeric < 0) {
+    return `-${formatted}`
+  }
+
+  return formatted
+}
+
+function formatPercent(value: string | null): string {
+  if (value === null) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return value
+  }
+
+  return `${new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(numeric)}%`
+}
+
+function pnlClass(value: string | null): string {
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric) || numeric === 0) {
+    return 'text-ink-muted'
+  }
+
+  return numeric > 0 ? 'text-success' : 'text-danger'
 }
 
 function portfolioInitial(name: string): string {
@@ -184,7 +245,7 @@ onMounted(() => {
   <main class="mx-auto max-w-2xl px-4 py-8 sm:py-10">
     <AppHeader
       title="Portfolios"
-      subtitle="Organize holdings into separate buckets."
+      subtitle="Current value and unrealized PnL use the latest cached price."
     />
 
     <div v-if="success" class="mb-4 animate-fade-in">
@@ -378,7 +439,32 @@ onMounted(() => {
                   </span>
                 </div>
                 <p class="mt-0.5 text-sm text-ink-muted">
-                  Private · Updated {{ formatDate(portfolio.updatedAt) }}
+                  {{
+                    formatMoney(
+                      portfolio.valuation.currentValue,
+                      portfolio.valuation.currency,
+                    )
+                  }}
+                  <span
+                    class="ml-1"
+                    :class="pnlClass(portfolio.valuation.unrealizedPnl)"
+                  >
+                    {{
+                      formatSignedMoney(
+                        portfolio.valuation.unrealizedPnl,
+                        portfolio.valuation.currency,
+                      )
+                    }}
+                  </span>
+                  <span class="ml-2 text-ink-muted">
+                    {{ formatPercent(portfolio.valuation.allocationPct) }}
+                  </span>
+                  <span
+                    v-if="portfolio.valuation.stale"
+                    class="ml-2 text-[11px] font-medium uppercase tracking-wide"
+                  >
+                    Stale
+                  </span>
                 </p>
               </div>
             </div>

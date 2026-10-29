@@ -18,6 +18,28 @@ export interface UpdateProfileInput {
   defaultCurrency?: 'USD' | 'EUR'
 }
 
+export interface HoldingValuation {
+  currency: 'USD' | 'EUR'
+  price: string | null
+  priceAsOf: string | null
+  stale: boolean
+  currentValue: string | null
+  costBasis: string
+  unrealizedPnl: string | null
+  unrealizedPnlPct: string | null
+  allocationPct: string | null
+}
+
+export interface PortfolioValuation {
+  currency: 'USD' | 'EUR'
+  currentValue: string
+  costBasis: string
+  unrealizedPnl: string | null
+  unrealizedPnlPct: string | null
+  allocationPct: string | null
+  stale: boolean
+}
+
 export interface Portfolio {
   id: string
   name: string
@@ -26,6 +48,7 @@ export interface Portfolio {
   shareMode: 'FULL' | 'ALLOCATION_ONLY' | 'HIDDEN'
   createdAt: string
   updatedAt: string
+  valuation: PortfolioValuation
 }
 
 export interface PortfolioNameInput {
@@ -51,6 +74,7 @@ export interface Holding {
   avgCostBasis: string
   acquiredOn: string
   asset: HoldingAsset
+  valuation: HoldingValuation
 }
 
 export interface CreateHoldingInput {
@@ -64,4 +88,27 @@ export interface CreateHoldingInput {
   quantity: string
   avgCostBasis: string
   acquiredOn: string
+}
+
+export interface LedgerTransaction {
+  id: string
+  portfolioId: string
+  assetId: string
+  type: 'BUY' | 'SELL'
+  quantity: string
+  price: string
+  realizedPnl: string | null
+  occurredAt: string
+  createdAt: string
+}
+
+export interface SellHoldingInput {
+  quantity: string
+  price: string
+  occurredAt?: string
+}
+
+export interface SellHoldingResult {
+  transaction: LedgerTransaction
+  holding: Holding | null
 }
