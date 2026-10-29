@@ -1,0 +1,1 @@
+export const DEFAULT_QUOTE_TIMEOUT_MS = 5_000;

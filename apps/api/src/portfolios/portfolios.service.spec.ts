@@ -7,6 +7,16 @@ import {
 import type { PortfolioResponse } from './portfolios.types';
 
 describe('PortfoliosService', () => {
+  const emptyValuation = {
+    currency: 'USD' as const,
+    currentValue: '0',
+    costBasis: '0',
+    unrealizedPnl: '0',
+    unrealizedPnlPct: null,
+    allocationPct: null,
+    stale: false,
+  };
+
   const portfolio: PortfolioResponse = {
     id: 'portfolio-id',
     name: 'Default',
@@ -15,6 +25,7 @@ describe('PortfoliosService', () => {
     shareMode: 'HIDDEN',
     createdAt: new Date('2026-01-15T12:00:00.000Z'),
     updatedAt: new Date('2026-01-15T12:00:00.000Z'),
+    valuation: emptyValuation,
   };
 
   function createDatabase(options: {
@@ -54,16 +65,30 @@ describe('PortfoliosService', () => {
     };
   }
 
+  function createValuation() {
+    return {
+      summarize: jest.fn(async (_userId: string, ids: string[]) => {
+        return new Map(ids.map((id) => [id, emptyValuation]));
+      }),
+    };
+  }
+
   it('lists active portfolios for a user', async () => {
     const database = createDatabase({ selectRows: [portfolio] });
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(service.listForUser('user-id')).resolves.toEqual([portfolio]);
   });
 
   it('throws when a portfolio is missing', async () => {
     const database = createDatabase({ selectRows: [] });
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.findOneForUser('user-id', 'missing-id'),
@@ -72,7 +97,10 @@ describe('PortfoliosService', () => {
 
   it('creates a named portfolio', async () => {
     const database = createDatabase({});
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
     const values = jest.fn().mockReturnValue({
       returning: jest.fn().mockResolvedValue([portfolio]),
     });
@@ -93,7 +121,10 @@ describe('PortfoliosService', () => {
     const database = createDatabase({
       updateRows: [updated],
     });
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.updateForUser('user-id', 'portfolio-id', { name: 'Growth' }),
@@ -102,7 +133,10 @@ describe('PortfoliosService', () => {
 
   it('throws when updating a missing portfolio', async () => {
     const database = createDatabase({ updateRows: [] });
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.updateForUser('user-id', 'missing-id', { name: 'Growth' }),
@@ -120,7 +154,10 @@ describe('PortfoliosService', () => {
     });
     database.update.mockReturnValue({ set });
 
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
     await expect(
       service.softDeleteForUser('user-id', 'portfolio-id'),
     ).resolves.toBeUndefined();
@@ -135,7 +172,10 @@ describe('PortfoliosService', () => {
 
   it('throws when soft-deleting a missing portfolio', async () => {
     const database = createDatabase({ updateRows: [] });
-    const service = new PortfoliosService(database as never);
+    const service = new PortfoliosService(
+      database as never,
+      createValuation() as never,
+    );
 
     await expect(
       service.softDeleteForUser('user-id', 'missing-id'),
@@ -145,7 +185,10 @@ describe('PortfoliosService', () => {
   it('creates the default portfolio for a new user', async () => {
     const values = jest.fn().mockResolvedValue(undefined);
     const insert = jest.fn().mockReturnValue({ values });
-    const service = new PortfoliosService({ insert } as never);
+    const service = new PortfoliosService(
+      { insert } as never,
+      createValuation() as never,
+    );
 
     await service.createDefaultForUser('user-id');
 

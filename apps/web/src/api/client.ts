@@ -1,8 +1,13 @@
 import type {
   AuthenticationResult,
+  CreateHoldingInput,
+  Holding,
+  LedgerTransaction,
   Portfolio,
   PortfolioNameInput,
   PublicUser,
+  SellHoldingInput,
+  SellHoldingResult,
   UpdateProfileInput,
 } from './types'
 
@@ -220,11 +225,56 @@ export const api = {
     })
   },
 
+  getPortfolio(accessToken: string, portfolioId: string) {
+    return request<Portfolio>(`/portfolios/${portfolioId}`, { accessToken })
+  },
+
   deletePortfolio(accessToken: string, portfolioId: string) {
     return request<void>(`/portfolios/${portfolioId}`, {
       method: 'DELETE',
       accessToken,
     })
+  },
+
+  listHoldings(accessToken: string, portfolioId: string) {
+    return request<Holding[]>(`/portfolios/${portfolioId}/holdings`, {
+      accessToken,
+    })
+  },
+
+  createHolding(
+    accessToken: string,
+    portfolioId: string,
+    input: CreateHoldingInput,
+  ) {
+    return request<Holding>(`/portfolios/${portfolioId}/holdings`, {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify(input),
+    })
+  },
+
+  listTransactions(accessToken: string, portfolioId: string) {
+    return request<LedgerTransaction[]>(
+      `/portfolios/${portfolioId}/transactions`,
+      { accessToken },
+    )
+  },
+
+  sellHolding(
+    accessToken: string,
+    portfolioId: string,
+    holdingId: string,
+    input: SellHoldingInput,
+  ) {
+    return request<SellHoldingResult>(
+      `/portfolios/${portfolioId}/holdings/${holdingId}/sell`,
+      {
+        method: 'POST',
+        accessToken,
+        body: JSON.stringify(input),
+      },
+    )
   },
 }
 

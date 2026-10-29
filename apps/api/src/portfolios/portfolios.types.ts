@@ -1,3 +1,5 @@
+import type { PortfolioValuation } from './valuation/valuation.types';
+
 export type PortfolioResponse = {
   id: string;
   name: string;
@@ -6,4 +8,5 @@ export type PortfolioResponse = {
   shareMode: 'FULL' | 'ALLOCATION_ONLY' | 'HIDDEN';
   createdAt: Date;
   updatedAt: Date;
+  valuation: PortfolioValuation;
 };

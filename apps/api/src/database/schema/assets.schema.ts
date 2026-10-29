@@ -31,3 +31,5 @@ export const assets = pgTable(
     ),
   ],
 );
+
+export type Asset = typeof assets.$inferSelect;

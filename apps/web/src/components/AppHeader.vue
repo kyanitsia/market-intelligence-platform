@@ -18,6 +18,16 @@ const navItems = [
   { label: 'Profile', to: '/profile' },
 ]
 
+function isActive(to: string): boolean {
+  if (to === '/portfolios') {
+    return (
+      route.path === '/portfolios' || route.path.startsWith('/portfolios/')
+    )
+  }
+
+  return route.path === to
+}
+
 const userInitial = computed(() => {
   const source =
     auth.state.user?.displayName?.trim() ||
@@ -93,7 +103,7 @@ async function logout(): Promise<void> {
           :to="item.to"
           class="rounded-lg px-4 py-2 text-sm font-medium transition"
           :class="
-            route.path === item.to
+            isActive(item.to)
               ? 'bg-brand text-brand-contrast shadow-sm'
               : 'text-ink-muted hover:text-ink'
           "

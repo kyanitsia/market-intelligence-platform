@@ -1,0 +1,1 @@
+ALTER TABLE "holdings" ADD COLUMN "acquired_on" date NOT NULL;

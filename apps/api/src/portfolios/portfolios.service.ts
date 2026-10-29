@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 
 import { DATABASE, type Database } from '../database/database.types';
@@ -10,8 +6,13 @@ import { portfolios } from '../database/schema';
 import type { CreatePortfolioDto } from './dto/create-portfolio.dto';
 import type { UpdatePortfolioDto } from './dto/update-portfolio.dto';
 import type { PortfolioResponse } from './portfolios.types';
+import { PortfolioValuationService } from './valuation/portfolio-valuation.service';
+import { assignPortfolioAllocations } from './valuation/value-holdings';
+import type { PortfolioValuation } from './valuation/valuation.types';
 
 export const DEFAULT_PORTFOLIO_NAME = 'Default';
+
+type PortfolioRow = Omit<PortfolioResponse, 'valuation'>;
 
 const portfolioColumns = {
   id: portfolios.id,
@@ -28,14 +29,17 @@ export class PortfoliosService {
   constructor(
     @Inject(DATABASE)
     private readonly database: Database,
+    private readonly valuation: PortfolioValuationService,
   ) {}
 
   async listForUser(userId: string): Promise<PortfolioResponse[]> {
-    return this.database
+    const rows = await this.database
       .select(portfolioColumns)
       .from(portfolios)
       .where(and(eq(portfolios.userId, userId), isNull(portfolios.deletedAt)))
       .orderBy(asc(portfolios.createdAt));
+
+    return this.withValuations(userId, rows);
   }
 
   async findOneForUser(
@@ -58,7 +62,7 @@ export class PortfoliosService {
       throw new NotFoundException('Portfolio not found');
     }
 
-    return portfolio;
+    return this.withValuation(userId, portfolio);
   }
 
   async createForUser(
@@ -73,7 +77,7 @@ export class PortfoliosService {
       })
       .returning(portfolioColumns);
 
-    return created;
+    return this.withValuation(userId, created);
   }
 
   async updateForUser(
@@ -100,7 +104,7 @@ export class PortfoliosService {
       throw new NotFoundException('Portfolio not found');
     }
 
-    return updated;
+    return this.withValuation(userId, updated);
   }
 
   async softDeleteForUser(userId: string, portfolioId: string): Promise<void> {
@@ -137,6 +141,36 @@ export class PortfoliosService {
       userId,
       name: DEFAULT_PORTFOLIO_NAME,
     });
+  }
+
+  private async withValuation(
+    userId: string,
+    portfolio: PortfolioRow,
+  ): Promise<PortfolioResponse> {
+    const [valued] = await this.withValuations(userId, [portfolio]);
+    return valued;
+  }
+
+  private async withValuations(
+    userId: string,
+    rows: PortfolioRow[],
+  ): Promise<PortfolioResponse[]> {
+    const idRows = await this.database
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(and(eq(portfolios.userId, userId), isNull(portfolios.deletedAt)))
+      .orderBy(asc(portfolios.createdAt));
+    const summaries = await this.valuation.summarize(
+      userId,
+      idRows.map((row) => row.id),
+    );
+
+    assignPortfolioAllocations(summaries);
+
+    return rows.map((row) => ({
+      ...row,
+      valuation: summaries.get(row.id) as PortfolioValuation,
+    }));
   }
 
   private normalizeName(name: string): string {
