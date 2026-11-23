@@ -73,7 +73,43 @@ export function unixRange(
   };
 }
 
+const MAX_FETCH_ATTEMPTS = 3;
+
+export function retryDelayMs(attempt: number): number {
+  const ceiling = 200 * 2 ** attempt;
+  return ceiling + Math.floor(Math.random() * ceiling);
+}
+
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function fetchMarketJson<T>(
+  source: MarketDataSource,
+  url: string,
+  headers?: Record<string, string>,
+  sleep: (ms: number) => Promise<void> = delay,
+): Promise<T> {
+  let lastError: MarketDataError | undefined;
+
+  for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      return await requestMarketJson<T>(source, url, headers);
+    } catch (error: unknown) {
+      lastError = asMarketDataError(source, error);
+
+      if (attempt === MAX_FETCH_ATTEMPTS - 1 || !isTransient(lastError)) {
+        throw lastError;
+      }
+
+      await sleep(retryDelayMs(attempt));
+    }
+  }
+
+  throw lastError ?? new MarketDataError(source, `${source} request failed`);
+}
+
+async function requestMarketJson<T>(
   source: MarketDataSource,
   url: string,
   headers?: Record<string, string>,
@@ -90,8 +126,7 @@ export async function fetchMarketJson<T>(
       signal: AbortSignal.timeout(DEFAULT_QUOTE_TIMEOUT_MS),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'request failed';
-    throw new MarketDataError(source, message);
+    throw asMarketDataError(source, error);
   }
 
   if (!response.ok) {
@@ -107,6 +142,32 @@ export async function fetchMarketJson<T>(
   } catch {
     throw new MarketDataError(source, `${source} returned invalid JSON`);
   }
+}
+
+function asMarketDataError(source: MarketDataSource, error: unknown): MarketDataError {
+  if (error instanceof MarketDataError) {
+    return error;
+  }
+
+  const name = error instanceof Error ? error.name : '';
+
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new MarketDataError(source, `${source} request timed out`);
+  }
+
+  return new MarketDataError(source, `${source} request failed`);
+}
+
+function isTransient(error: MarketDataError): boolean {
+  if (error.status === 429 || error.status === 408) {
+    return true;
+  }
+
+  if (error.status !== undefined && error.status >= 500) {
+    return true;
+  }
+
+  return error.status === undefined && error.message.endsWith('timed out');
 }
 
 type PricePoint = [number, number];

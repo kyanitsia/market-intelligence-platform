@@ -15,6 +15,8 @@ const auth = useAuth()
 
 const navItems = [
   { label: 'Portfolios', to: '/portfolios' },
+  { label: 'Watchlist', to: '/watchlist' },
+  { label: 'Alerts', to: '/alerts' },
   { label: 'Profile', to: '/profile' },
 ]
 
@@ -85,27 +87,27 @@ async function logout(): Promise<void> {
       </button>
     </div>
 
-    <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 class="font-display text-3xl font-semibold tracking-tight text-ink">
-          {{ title }}
-        </h1>
-        <p v-if="subtitle" class="mt-1 text-sm text-ink-muted">{{ subtitle }}</p>
-      </div>
+    <div class="mt-6">
+      <h1 class="font-display text-3xl font-semibold tracking-tight text-ink">
+        {{ title }}
+      </h1>
+      <p v-if="subtitle" class="mt-1 max-w-xl text-sm text-ink-muted">
+        {{ subtitle }}
+      </p>
 
       <nav
-        class="inline-flex rounded-xl border border-line bg-surface-raised p-1 shadow-sm"
+        class="mt-4 flex w-full flex-wrap gap-1 rounded-xl border border-line bg-surface-raised p-1 shadow-sm sm:w-fit"
         aria-label="Main navigation"
       >
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="rounded-lg px-4 py-2 text-sm font-medium transition"
+          class="rounded-lg px-3 py-2 text-sm font-medium transition"
           :class="
             isActive(item.to)
               ? 'bg-brand text-brand-contrast shadow-sm'
-              : 'text-ink-muted hover:text-ink'
+              : 'text-ink-muted hover:bg-brand/5 hover:text-ink'
           "
         >
           {{ item.label }}

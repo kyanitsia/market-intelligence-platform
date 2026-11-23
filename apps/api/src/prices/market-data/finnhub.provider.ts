@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import type { Asset } from '../../database/schema';
+import { hitsFromFinnhub, type CatalogHit } from '../../market/asset-search';
 import {
   fetchMarketJson,
   finiteNumber,
@@ -22,14 +23,21 @@ type FinnhubQuote = {
   l?: number;
 };
 
-type FinnhubCandles = {
-  s?: string;
-  c?: number[];
-  h?: number[];
-  l?: number[];
-  o?: number[];
-  t?: number[];
-  v?: number[];
+type YahooChart = {
+  chart?: {
+    result?: Array<{
+      timestamp?: number[];
+      indicators?: {
+        quote?: Array<{
+          open?: Array<number | null>;
+          high?: Array<number | null>;
+          low?: Array<number | null>;
+          close?: Array<number | null>;
+          volume?: Array<number | null>;
+        }>;
+      };
+    }>;
+  };
 };
 
 @Injectable()
@@ -66,28 +74,22 @@ export class FinnhubProvider implements MarketDataProvider {
   async getPriceHistory(asset: Asset, range: PriceRange): Promise<Candle[]> {
     this.assertListed(asset);
     const { from, to } = unixRange('finnhub', range);
-    const payload = await fetchMarketJson<FinnhubCandles>(
-      'finnhub',
-      this.url('/stock/candle', {
-        symbol: asset.symbol,
-        resolution: range.interval === '1w' ? 'W' : 'D',
-        from: String(from),
-        to: String(to),
-      }),
+    const url = new URL(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(asset.symbol)}`,
     );
+    url.searchParams.set('period1', String(from));
+    url.searchParams.set('period2', String(to));
+    url.searchParams.set('interval', range.interval === '1w' ? '1wk' : '1d');
 
-    if (payload.s === 'no_data') {
-      return [];
+    const payload = await fetchMarketJson<YahooChart>('finnhub', url.toString());
+    const series = payload.chart?.result?.[0];
+    const quote = series?.indicators?.quote?.[0];
+
+    if (!series?.timestamp || !quote) {
+      throw new MarketDataError('finnhub', `No stock history for ${asset.symbol}`);
     }
 
-    if (payload.s !== 'ok') {
-      throw new MarketDataError(
-        'finnhub',
-        `Finnhub history failed for ${asset.symbol}`,
-      );
-    }
-
-    return toCandles(asset.id, range.interval, payload);
+    return toCandles(asset.id, range.interval, series.timestamp, quote);
   }
 
   private assertListed(asset: Asset): void {
@@ -97,6 +99,14 @@ export class FinnhubProvider implements MarketDataProvider {
         'Finnhub supports STOCK and ETF assets only',
       );
     }
+  }
+
+  async search(query: string): Promise<CatalogHit[]> {
+    const payload = await fetchMarketJson<{
+      result?: Array<{ symbol?: string; description?: string; type?: string }>;
+    }>('finnhub', this.url('/search', { q: query }));
+
+    return hitsFromFinnhub(payload.result ?? []);
   }
 
   private url(path: string, params: Record<string, string>): string {
@@ -124,16 +134,22 @@ export class FinnhubProvider implements MarketDataProvider {
 function toCandles(
   assetId: string,
   interval: CandleInterval,
-  payload: FinnhubCandles,
+  times: number[],
+  quote: {
+    open?: Array<number | null>;
+    high?: Array<number | null>;
+    low?: Array<number | null>;
+    close?: Array<number | null>;
+    volume?: Array<number | null>;
+  },
 ): Candle[] {
-  const times = payload.t ?? [];
   const candles: Candle[] = [];
 
   for (const [index, time] of times.entries()) {
-    const open = finiteNumber(payload.o?.[index]);
-    const high = finiteNumber(payload.h?.[index]);
-    const low = finiteNumber(payload.l?.[index]);
-    const close = finiteNumber(payload.c?.[index]);
+    const open = finiteNumber(quote.open?.[index]);
+    const high = finiteNumber(quote.high?.[index]);
+    const low = finiteNumber(quote.low?.[index]);
+    const close = finiteNumber(quote.close?.[index]);
 
     if (
       !Number.isFinite(time) ||
@@ -145,7 +161,7 @@ function toCandles(
       continue;
     }
 
-    const volume = payload.v?.[index];
+    const volume = quote.volume?.[index];
 
     candles.push({
       assetId,

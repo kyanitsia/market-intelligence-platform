@@ -9,11 +9,12 @@ import type {
   HoldingAssetResponse,
   HoldingResponse,
 } from '../holdings/holdings.types';
-import type {
-  CachedPrice,
-  Currency,
-  HoldingValuation,
-  PortfolioValuation,
+import {
+  quoteStats,
+  type CachedPrice,
+  type Currency,
+  type HoldingValuation,
+  type PortfolioValuation,
 } from './valuation.types';
 
 export type ValuationHoldingRow = {
@@ -120,6 +121,7 @@ function valueHolding(
     currency: options.currency,
     price: cached?.price ?? null,
     priceAsOf: cached ? cached.asOf.toISOString() : null,
+    ...quoteStats(cached),
     stale,
     currentValue,
     costBasis,

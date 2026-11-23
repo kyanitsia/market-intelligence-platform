@@ -22,6 +22,11 @@ export interface HoldingValuation {
   currency: 'USD' | 'EUR'
   price: string | null
   priceAsOf: string | null
+  change24h: string | null
+  changePercent24h: string | null
+  volume24h: string | null
+  high24h: string | null
+  low24h: string | null
   stale: boolean
   currentValue: string | null
   costBasis: string
@@ -111,4 +116,89 @@ export interface SellHoldingInput {
 export interface SellHoldingResult {
   transaction: LedgerTransaction
   holding: Holding | null
+}
+
+export interface AssetQuote {
+  currency: 'USD'
+  price: string | null
+  priceAsOf: string | null
+  stale: boolean
+  change24h: string | null
+  changePercent24h: string | null
+  volume24h: string | null
+  high24h: string | null
+  low24h: string | null
+}
+
+export interface CatalogAsset {
+  id: string
+  symbol: string
+  name: string
+  assetType: AssetType
+  externalProvider: string
+  externalId: string
+  status: 'ACTIVE' | 'INACTIVE'
+}
+
+export interface AssetStats extends CatalogAsset {
+  quote: AssetQuote
+}
+
+export type ChartRange = '1D' | '1W' | '1M' | '1Y'
+
+export interface CandlePoint {
+  timestamp: string
+  open: string
+  high: string
+  low: string
+  close: string
+  volume: string | null
+}
+
+export interface AssetHistory {
+  assetId: string
+  range: ChartRange
+  interval: '1d'
+  candles: CandlePoint[]
+  latest: AssetQuote
+  priorClose: string | null
+}
+
+export interface WatchlistItem {
+  id: string
+  createdAt: string
+  asset: CatalogAsset
+  quote: AssetQuote
+}
+
+export interface Watchlist {
+  id: string
+  name: string
+  items: WatchlistItem[]
+}
+
+export interface PriceAlert {
+  id: string
+  operator: 'GTE' | 'LTE'
+  targetPrice: string
+  active: boolean
+  lastTriggeredAt: string | null
+  cooldownMinutes: number
+  createdAt: string
+  asset: CatalogAsset
+}
+
+export interface AppNotification {
+  id: string
+  type: string
+  payload: {
+    alertId: string
+    assetId: string
+    symbol: string
+    price: string
+    operator: 'GTE' | 'LTE'
+    targetPrice: string
+  }
+  readAt: string | null
+  createdAt: string
 }

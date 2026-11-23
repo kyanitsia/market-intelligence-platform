@@ -35,12 +35,15 @@ services:
       CORS_ORIGIN: http://localhost:5173
       AUTH_COOKIE_SECURE: "false"
       PRICE_STALE_AFTER_MS: "900000"
-      GOOGLE_REDIRECT_URI: http://localhost:3000/api/v1/auth/google/callback
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://market:market@rabbitmq:5672
+      MARKET_DATA_POLL_INTERVAL_MS: "300000"
+      GOOGLE_REDIRECT_URI: http://localhost:8080/api/v1/auth/google/callback
       GOOGLE_OAUTH_SUCCESS_URL: http://localhost:5173/auth/callback
       GOOGLE_OAUTH_LINK_URL: http://localhost:5173/auth/link
       CHOKIDAR_USEPOLLING: "true"
     ports:
-      - "3000:3000"
+      - "8080:3000"
     volumes:
       - ./apps/api/src:/app/apps/api/src
       - ./apps/api/drizzle:/app/apps/api/drizzle
@@ -50,6 +53,10 @@ services:
       - ./apps/api/tsconfig.build.json:/app/apps/api/tsconfig.build.json
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test:
@@ -64,6 +71,31 @@ services:
       retries: 12
       start_period: 40s
 
+  redis:
+    image: redis:7-alpine
+    container_name: market-intelligence-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: market-intelligence-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: market
+      RABBITMQ_DEFAULT_PASS: market
+    ports:
+      - "5672:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
   web:
     build:
       context: .
@@ -72,7 +104,7 @@ services:
     container_name: market-intelligence-web
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:3000/api/v1
+      VITE_API_URL: http://localhost:8080/api/v1
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "5173:5173"
@@ -90,3 +122,4 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:

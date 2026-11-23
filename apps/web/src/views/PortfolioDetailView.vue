@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ApiError, api } from '../api/client'
-import type { AssetType, Holding, LedgerTransaction, Portfolio } from '../api/types'
+import type { AssetType, CatalogAsset, Holding, LedgerTransaction, Portfolio } from '../api/types'
 import { useAuth } from '../auth/session'
 import AppAlert from '../components/AppAlert.vue'
 import AppHeader from '../components/AppHeader.vue'
@@ -33,11 +33,15 @@ const form = reactive({
   assetType: 'CRYPTO' as AssetType,
   symbol: '',
   externalId: '',
+  externalProvider: '',
   name: '',
   quantity: '',
   avgCostBasis: '',
   acquiredOn: todayIsoDate(),
 })
+const assetQuery = ref('')
+const assetResults = ref<CatalogAsset[]>([])
+const searchingAssets = ref(false)
 
 let successTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -159,6 +163,30 @@ function formatSignedMoney(value: string | null, currency: string): string {
   return formatted
 }
 
+function formatSignedPercent(value: string | null): string {
+  if (value === null) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+
+  if (!Number.isFinite(numeric)) {
+    return value
+  }
+
+  const formatted = formatPercent(Math.abs(numeric).toString())
+
+  if (numeric > 0) {
+    return `+${formatted}`
+  }
+
+  if (numeric < 0) {
+    return `-${formatted}`
+  }
+
+  return formatted
+}
+
 function formatPercent(value: string | null): string {
   if (value === null) {
     return '—'
@@ -189,10 +217,40 @@ function pnlClass(value: string | null): string {
 function resetForm(): void {
   form.symbol = ''
   form.externalId = ''
+  form.externalProvider = ''
   form.name = ''
   form.quantity = ''
   form.avgCostBasis = ''
   form.acquiredOn = todayIsoDate()
+  assetQuery.value = ''
+  assetResults.value = []
+}
+
+async function searchAssets(): Promise<void> {
+  if (assetQuery.value.trim().length < 2 || searchingAssets.value) {
+    return
+  }
+
+  searchingAssets.value = true
+  error.value = ''
+
+  try {
+    assetResults.value = await api.searchAssets(requireToken(), assetQuery.value.trim())
+  } catch (caught: unknown) {
+    error.value = caught instanceof ApiError ? caught.message : 'Search failed'
+  } finally {
+    searchingAssets.value = false
+  }
+}
+
+function chooseAsset(asset: CatalogAsset): void {
+  form.assetType = asset.assetType
+  form.symbol = asset.symbol
+  form.externalId = asset.externalId
+  form.externalProvider = asset.externalProvider
+  form.name = asset.name
+  assetResults.value = []
+  assetQuery.value = asset.symbol
 }
 
 async function refresh(): Promise<void> {
@@ -244,6 +302,7 @@ async function addHolding(): Promise<void> {
         externalId: form.externalId.trim(),
         assetType: form.assetType,
         name: form.name.trim() || undefined,
+        externalProvider: form.externalProvider || undefined,
       },
       quantity: form.quantity.trim(),
       avgCostBasis: form.avgCostBasis.trim(),
@@ -431,11 +490,37 @@ onMounted(() => {
     >
       <h2 class="font-display text-lg font-semibold text-ink">Add holding</h2>
       <p class="mt-1 text-sm text-ink-muted">
-        Assets are identified by canonical symbol and external ID. Types:
-        CRYPTO, STOCK, ETF.
+        Search the catalog, then enter quantity and cost. Types: CRYPTO, STOCK, ETF.
       </p>
 
       <form class="mt-5 space-y-4" @submit.prevent="addHolding">
+        <div class="flex gap-2">
+          <input
+            v-model="assetQuery"
+            type="search"
+            placeholder="Search BTC, AAPL, SPY"
+            class="w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+          />
+          <button
+            type="button"
+            class="rounded-xl border border-line-strong px-4 text-sm"
+            :disabled="searchingAssets"
+            @click="searchAssets"
+          >
+            {{ searchingAssets ? 'Searching…' : 'Search' }}
+          </button>
+        </div>
+        <ul v-if="assetResults.length" class="grid gap-1">
+          <li v-for="asset in assetResults" :key="asset.id">
+            <button
+              type="button"
+              class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-brand/10"
+              @click="chooseAsset(asset)"
+            >
+              {{ asset.symbol }} · {{ asset.name }} · {{ asset.assetType }}
+            </button>
+          </li>
+        </ul>
         <div class="grid gap-4 sm:grid-cols-3">
           <label class="block text-sm font-medium text-ink-soft">
             Asset type
@@ -575,9 +660,12 @@ onMounted(() => {
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <p class="font-semibold text-ink">
+                <router-link
+                  :to="`/assets/${holding.asset.id}`"
+                  class="font-semibold text-ink hover:text-brand"
+                >
                   {{ holding.asset.symbol }}
-                </p>
+                </router-link>
                 <span
                   class="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-brand"
                 >
@@ -662,6 +750,52 @@ onMounted(() => {
               </div>
             </dl>
           </div>
+          <p
+            v-if="
+              holding.valuation.changePercent24h !== null ||
+              holding.valuation.high24h !== null ||
+              holding.valuation.low24h !== null ||
+              holding.valuation.volume24h !== null
+            "
+            class="mt-3 text-xs text-ink-muted"
+          >
+            <span
+              v-if="holding.valuation.changePercent24h !== null"
+              :class="pnlClass(holding.valuation.changePercent24h)"
+            >
+              24h {{ formatSignedPercent(holding.valuation.changePercent24h) }}
+            </span>
+            <span v-if="holding.valuation.high24h !== null">
+              {{ holding.valuation.changePercent24h !== null ? ' · ' : '' }}
+              High
+              {{
+                formatMoney(
+                  holding.valuation.high24h,
+                  holding.valuation.currency,
+                )
+              }}
+            </span>
+            <span v-if="holding.valuation.low24h !== null">
+              {{
+                holding.valuation.high24h !== null ||
+                holding.valuation.changePercent24h !== null
+                  ? ' · '
+                  : ''
+              }}Low
+              {{
+                formatMoney(holding.valuation.low24h, holding.valuation.currency)
+              }}
+            </span>
+            <span v-if="holding.valuation.volume24h !== null">
+              {{
+                holding.valuation.changePercent24h !== null ||
+                holding.valuation.high24h !== null ||
+                holding.valuation.low24h !== null
+                  ? ' · '
+                  : ''
+              }}Vol {{ formatDecimal(holding.valuation.volume24h) }}
+            </span>
+          </p>
           <p
             v-if="holding.valuation.stale"
             class="mt-3 text-xs font-medium uppercase tracking-wide text-ink-muted"

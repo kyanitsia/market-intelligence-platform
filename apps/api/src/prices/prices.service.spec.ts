@@ -1,5 +1,5 @@
 import { PricesService } from './prices.service';
-import type { MarketDataService } from './market-data/market-data.service';
+import type { PriceCache } from './ingestion/price-cache';
 import type { PriceSnapshot } from './market-data/market-data';
 import type { Asset } from '../database/schema';
 
@@ -12,9 +12,10 @@ describe('PricesService', () => {
     externalProvider: 'coingecko',
     externalId: 'bitcoin',
     status: 'ACTIVE',
+    candlesSyncedAt: null,
   };
 
-  const asOf = new Date();
+  const asOf = new Date('2026-11-17T10:00:00.000Z');
   const freshFor = 15 * 60 * 1000;
 
   function snapshot(price: number, fetchedAt = asOf): PriceSnapshot {
@@ -23,106 +24,116 @@ describe('PricesService', () => {
       symbol: asset.symbol,
       price,
       currency: 'USD',
-      change24h: null,
-      changePercent24h: null,
-      volume24h: null,
-      high24h: null,
-      low24h: null,
+      change24h: -100,
+      changePercent24h: 1.5,
+      volume24h: 20,
+      high24h: 66000,
+      low24h: 64000,
       source: 'coingecko',
       fetchedAt: fetchedAt.toISOString(),
     };
   }
 
-  it('returns the latest cached price without fetching', async () => {
+  function cacheOf(rows: PriceSnapshot[]): PriceCache {
+    return {
+      readMany: jest.fn(async () => {
+        const found = new Map(
+          rows.map((row) => [row.assetId, { ...row, stale: false }]),
+        );
+        return found;
+      }),
+    } as unknown as PriceCache;
+  }
+
+  function database(rows: Array<{ assetId: string; price: string; asOf: Date }>) {
     const select = jest.fn().mockReturnValue({
       from: jest.fn().mockReturnValue({
-        where: jest
-          .fn()
-          .mockResolvedValue([{ assetId: asset.id, price: '65000', asOf }]),
+        where: jest.fn().mockResolvedValue(rows),
       }),
     });
-    const marketData = { getLatestPrices: jest.fn() };
-    const service = new PricesService(
-      { select, insert: jest.fn() } as never,
-      marketData as unknown as MarketDataService,
-    );
 
-    await expect(
-      service.getLatestForAssets([asset], 'USD', freshFor),
-    ).resolves.toEqual(new Map([[asset.id, { price: '65000', asOf }]]));
-    expect(marketData.getLatestPrices).not.toHaveBeenCalled();
-  });
+    return { select, insert: jest.fn() };
+  }
 
-  it('fetches and caches quotes only when a price is missing', async () => {
-    const select = jest.fn().mockReturnValue({
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue([]),
-      }),
-    });
-    const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
-    const insert = jest.fn().mockReturnValue({
-      values: jest.fn().mockReturnValue({ onConflictDoUpdate }),
-    });
-    const marketData = {
-      getLatestPrices: jest.fn().mockResolvedValue([snapshot(65000)]),
-    };
-    const service = new PricesService(
-      { select, insert } as never,
-      marketData as unknown as MarketDataService,
-    );
-
-    await expect(
-      service.getLatestForAssets([asset], 'USD', freshFor),
-    ).resolves.toEqual(new Map([[asset.id, { price: '65000', asOf }]]));
-    expect(marketData.getLatestPrices).toHaveBeenCalledWith([asset]);
-    expect(onConflictDoUpdate).toHaveBeenCalled();
-  });
-
-  it('does not store a USD quote as another currency', async () => {
-    const select = jest.fn().mockReturnValue({
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue([]),
-      }),
-    });
-    const marketData = { getLatestPrices: jest.fn() };
-    const service = new PricesService(
-      { select, insert: jest.fn() } as never,
-      marketData as unknown as MarketDataService,
-    );
-
-    await expect(
-      service.getLatestForAssets([asset], 'EUR', freshFor),
-    ).resolves.toEqual(new Map());
-    expect(marketData.getLatestPrices).not.toHaveBeenCalled();
-  });
-
-  it('refetches a cached price older than the stale window', async () => {
-    const staleAsOf = new Date(Date.now() - freshFor - 1);
-    const freshAsOf = new Date();
-    const select = jest.fn().mockReturnValue({
-      from: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue([
-          { assetId: asset.id, price: '60000', asOf: staleAsOf },
-        ]),
-      }),
-    });
-    const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
-    const insert = jest.fn().mockReturnValue({
-      values: jest.fn().mockReturnValue({ onConflictDoUpdate }),
-    });
-    const marketData = {
-      getLatestPrices: jest.fn().mockResolvedValue([snapshot(65000, freshAsOf)]),
-    };
-    const service = new PricesService(
-      { select, insert } as never,
-      marketData as unknown as MarketDataService,
-    );
+  it('returns the redis snapshot and does not read postgres', async () => {
+    const db = database([]);
+    const cache = cacheOf([snapshot(65000)]);
+    const service = new PricesService(db as never, cache);
 
     await expect(
       service.getLatestForAssets([asset], 'USD', freshFor),
     ).resolves.toEqual(
-      new Map([[asset.id, { price: '65000', asOf: freshAsOf }]]),
+      new Map([
+        [
+          asset.id,
+          {
+            price: '65000',
+            asOf,
+            change24h: '-100',
+            changePercent24h: '1.5',
+            volume24h: '20',
+            high24h: '66000',
+            low24h: '64000',
+          },
+        ],
+      ]),
     );
-    expect(marketData.getLatestPrices).toHaveBeenCalledWith([asset]);
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('returns a stale redis price without calling a provider', async () => {
+    const staleAsOf = new Date(Date.now() - freshFor - 1);
+    const db = database([]);
+    const service = new PricesService(db as never, cacheOf([snapshot(60000, staleAsOf)]));
+
+    await expect(
+      service.getLatestForAssets([asset], 'USD', freshFor),
+    ).resolves.toEqual(
+      new Map([[asset.id, expect.objectContaining({ price: '60000', asOf: staleAsOf })]]),
+    );
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the last postgres price when redis has none', async () => {
+    const db = database([{ assetId: asset.id, price: '60000', asOf }]);
+    const cache = cacheOf([]);
+    const service = new PricesService(db as never, cache);
+
+    await expect(
+      service.getLatestForAssets([asset], 'USD', freshFor),
+    ).resolves.toEqual(new Map([[asset.id, { price: '60000', asOf }]]));
+    expect(cache.readMany).toHaveBeenCalledWith([asset.id]);
+  });
+
+  it('does not read USD redis quotes for another currency', async () => {
+    const db = database([]);
+    const cache = cacheOf([snapshot(65000)]);
+    const service = new PricesService(db as never, cache);
+
+    await expect(
+      service.getLatestForAssets([asset], 'EUR', freshFor),
+    ).resolves.toEqual(new Map());
+    expect(cache.readMany).not.toHaveBeenCalled();
+  });
+
+  it('stores the ingested USD quote for the postgres fallback', async () => {
+    const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
+    const values = jest.fn().mockReturnValue({ onConflictDoUpdate });
+    const insert = jest.fn().mockReturnValue({ values });
+    const service = new PricesService(
+      { select: jest.fn(), insert } as never,
+      cacheOf([]) ,
+    );
+
+    await service.remember(snapshot(65000));
+
+    expect(values).toHaveBeenCalledWith([
+      {
+        assetId: asset.id,
+        currency: 'USD',
+        price: '65000',
+        asOf,
+      },
+    ]);
   });
 });
