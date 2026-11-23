@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import type { CatalogHit } from '../../market/asset-search';
 import type { Asset } from '../../database/schema';
 import { CoinGeckoProvider } from './coingecko.provider';
 import { FinnhubProvider } from './finnhub.provider';
@@ -28,6 +29,21 @@ export class MarketDataService {
     return this.providerFor(asset).getPriceHistory(asset, range);
   }
 
+  async search(query: string): Promise<CatalogHit[]> {
+    const [crypto, listed] = await Promise.all([
+      this.coingecko.search(query).catch((error: unknown) => {
+        this.logger.warn(this.searchFailure('coingecko', error));
+        return [] as CatalogHit[];
+      }),
+      this.finnhub.search(query).catch((error: unknown) => {
+        this.logger.warn(this.searchFailure('finnhub', error));
+        return [] as CatalogHit[];
+      }),
+    ]);
+
+    return [...crypto, ...listed];
+  }
+
   // ponytail: one request per asset; batch inside the provider if a refresh gets rate-limited
   async getLatestPrices(assets: Asset[]): Promise<PriceSnapshot[]> {
     const settled = await Promise.all(
@@ -46,6 +62,11 @@ export class MarketDataService {
     );
 
     return settled.filter((row): row is PriceSnapshot => row !== null);
+  }
+
+  private searchFailure(source: string, error: unknown): string {
+    const message = error instanceof Error ? error.message : 'request failed';
+    return `${source} search failed: ${message}`;
   }
 
   private providerFor(asset: Asset): MarketDataProvider {

@@ -4,9 +4,12 @@ import { useAuth } from './auth/session'
 import AuthView from './views/AuthView.vue'
 import GoogleCallbackView from './views/GoogleCallbackView.vue'
 import GoogleLinkView from './views/GoogleLinkView.vue'
+import AlertsView from './views/AlertsView.vue'
+import AssetDetailView from './views/AssetDetailView.vue'
 import PortfolioDetailView from './views/PortfolioDetailView.vue'
 import PortfoliosView from './views/PortfoliosView.vue'
 import ProfileView from './views/ProfileView.vue'
+import WatchlistView from './views/WatchlistView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -41,6 +44,21 @@ const router = createRouter({
     {
       path: '/profile',
       component: ProfileView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/watchlist',
+      component: WatchlistView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/alerts',
+      component: AlertsView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/assets/:id',
+      component: AssetDetailView,
       meta: { requiresAuth: true },
     },
   ],

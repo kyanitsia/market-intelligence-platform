@@ -9,6 +9,14 @@ import type {
   SellHoldingInput,
   SellHoldingResult,
   UpdateProfileInput,
+  AppNotification,
+  AssetHistory,
+  AssetStats,
+  CatalogAsset,
+  ChartRange,
+  PriceAlert,
+  Watchlist,
+  WatchlistItem,
 } from './types'
 
 export const apiUrl = import.meta.env.VITE_API_URL ?? '/api/v1'
@@ -259,6 +267,95 @@ export const api = {
       `/portfolios/${portfolioId}/transactions`,
       { accessToken },
     )
+  },
+
+  searchAssets(accessToken: string, query: string) {
+    return request<CatalogAsset[]>(
+      `/assets/search?q=${encodeURIComponent(query)}`,
+      { accessToken },
+    )
+  },
+
+  getAsset(accessToken: string, assetId: string) {
+    return request<CatalogAsset>(`/assets/${assetId}`, { accessToken })
+  },
+
+  getAssetStats(accessToken: string, assetId: string) {
+    return request<AssetStats>(`/assets/${assetId}/stats`, { accessToken })
+  },
+
+  getAssetPrices(accessToken: string, assetId: string, range: ChartRange) {
+    return request<AssetHistory>(`/assets/${assetId}/prices?range=${range}`, {
+      accessToken,
+    })
+  },
+
+  listWatchlists(accessToken: string) {
+    return request<Watchlist[]>('/watchlists', { accessToken })
+  },
+
+  addWatchlistItem(accessToken: string, watchlistId: string, assetId: string) {
+    return request<WatchlistItem>(`/watchlists/${watchlistId}/items`, {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify({ assetId }),
+    })
+  },
+
+  removeWatchlistItem(
+    accessToken: string,
+    watchlistId: string,
+    assetId: string,
+  ) {
+    return request<void>(`/watchlists/${watchlistId}/items/${assetId}`, {
+      method: 'DELETE',
+      accessToken,
+    })
+  },
+
+  listPriceAlerts(accessToken: string) {
+    return request<PriceAlert[]>('/alerts/price', { accessToken })
+  },
+
+  createPriceAlert(
+    accessToken: string,
+    input: { assetId: string; operator: 'GTE' | 'LTE'; targetPrice: string },
+  ) {
+    return request<PriceAlert>('/alerts/price', {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify(input),
+    })
+  },
+
+  updatePriceAlert(
+    accessToken: string,
+    alertId: string,
+    input: { active?: boolean; operator?: 'GTE' | 'LTE'; targetPrice?: string },
+  ) {
+    return request<PriceAlert>(`/alerts/price/${alertId}`, {
+      method: 'PATCH',
+      accessToken,
+      body: JSON.stringify(input),
+    })
+  },
+
+  deletePriceAlert(accessToken: string, alertId: string) {
+    return request<void>(`/alerts/price/${alertId}`, {
+      method: 'DELETE',
+      accessToken,
+    })
+  },
+
+  listNotifications(accessToken: string) {
+    return request<AppNotification[]>('/notifications', { accessToken })
+  },
+
+  markNotificationRead(accessToken: string, notificationId: string) {
+    return request<void>(`/notifications/${notificationId}`, {
+      method: 'PATCH',
+      accessToken,
+    })
   },
 
   sellHolding(

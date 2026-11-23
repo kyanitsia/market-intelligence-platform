@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import type { Asset } from '../../database/schema';
+import { hitsFromCoinGecko, type CatalogHit } from '../../market/asset-search';
 import {
   candlesFromPoints,
   fetchMarketJson,
@@ -28,6 +29,7 @@ type MarketChart = {
 };
 
 const COINGECKO_PUBLIC_API = 'https://api.coingecko.com/api/v3';
+const COINGECKO_PUBLIC_HISTORY_DAYS = 365;
 
 @Injectable()
 export class CoinGeckoProvider implements MarketDataProvider {
@@ -72,16 +74,15 @@ export class CoinGeckoProvider implements MarketDataProvider {
   async getPriceHistory(asset: Asset, range: PriceRange): Promise<Candle[]> {
     this.assertCrypto(asset);
     const { from, to } = unixRange('coingecko', range);
-    const days = Math.max(1, Math.ceil((Date.now() / 1000 - from) / 86_400));
+    const days = Math.min(
+      COINGECKO_PUBLIC_HISTORY_DAYS,
+      Math.max(1, Math.ceil((Date.now() / 1000 - from) / 86_400)),
+    );
     const url = new URL(
       `${COINGECKO_PUBLIC_API}/coins/${encodeURIComponent(asset.externalId)}/market_chart`,
     );
     url.searchParams.set('vs_currency', 'usd');
     url.searchParams.set('days', String(days));
-
-    if (days > 1) {
-      url.searchParams.set('interval', 'daily');
-    }
 
     const chart = await fetchMarketJson<MarketChart>('coingecko', url.toString());
     const fromMs = from * 1000;
@@ -95,6 +96,17 @@ export class CoinGeckoProvider implements MarketDataProvider {
         ([time]) => time >= fromMs && time <= toMs,
       ),
     );
+  }
+
+  async search(query: string): Promise<CatalogHit[]> {
+    const url = new URL(`${COINGECKO_PUBLIC_API}/search`);
+    url.searchParams.set('query', query);
+    const payload = await fetchMarketJson<{ coins?: Array<{ id?: string; symbol?: string; name?: string }> }>(
+      'coingecko',
+      url.toString(),
+    );
+
+    return hitsFromCoinGecko(payload.coins ?? []);
   }
 
   private assertCrypto(asset: Asset): void {

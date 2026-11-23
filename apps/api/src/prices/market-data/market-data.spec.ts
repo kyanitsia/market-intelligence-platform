@@ -2,7 +2,7 @@ import type { Asset } from '../../database/schema';
 import { CoinGeckoProvider } from './coingecko.provider';
 import { FinnhubProvider } from './finnhub.provider';
 import { MarketDataService } from './market-data.service';
-import { candlesFromPoints, MarketDataError } from './market-data';
+import { candlesFromPoints, fetchMarketJson, MarketDataError } from './market-data';
 
 const crypto: Asset = {
   id: 'btc-id',
@@ -12,6 +12,7 @@ const crypto: Asset = {
   externalProvider: 'coingecko',
   externalId: 'bitcoin',
   status: 'ACTIVE',
+  candlesSyncedAt: null,
 };
 
 const stock: Asset = {
@@ -22,6 +23,7 @@ const stock: Asset = {
   externalProvider: 'finnhub',
   externalId: 'AAPL',
   status: 'ACTIVE',
+  candlesSyncedAt: null,
 };
 
 function config(values: Record<string, string>) {
@@ -68,6 +70,26 @@ describe('market data providers', () => {
       change24h: 100,
       source: 'coingecko',
     });
+  });
+
+  it('caps CoinGecko history at the public 365 day limit', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ prices: [], total_volumes: [] }),
+    });
+    const from = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
+
+    await new CoinGeckoProvider().getPriceHistory(crypto, {
+      interval: '1d',
+      from,
+      to: new Date().toISOString(),
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+
+    expect(url.pathname).toBe('/api/v3/coins/bitcoin/market_chart');
+    expect(url.searchParams.get('days')).toBe('365');
+    expect(url.searchParams.has('interval')).toBe(false);
   });
 
   it('buckets CoinGecko price points into daily candles', () => {
@@ -118,13 +140,24 @@ describe('market data providers', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          s: 'ok',
-          t: [1_767_225_600],
-          o: [180],
-          h: [191],
-          l: [179],
-          c: [190],
-          v: [1000],
+          chart: {
+            result: [
+              {
+                timestamp: [1_767_225_600],
+                indicators: {
+                  quote: [
+                    {
+                      open: [180],
+                      high: [191],
+                      low: [179],
+                      close: [190],
+                      volume: [1000],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
         }),
       });
 
@@ -146,7 +179,11 @@ describe('market data providers', () => {
     expect(quoteUrl).toContain('/quote?');
     expect(quoteUrl).toContain('symbol=AAPL');
     expect(quoteUrl).toContain('token=token');
-    expect(candleUrl).toContain('resolution=D');
+    expect(candleUrl).toContain(
+      'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?',
+    );
+    expect(candleUrl).toContain('interval=1d');
+    expect(candleUrl).not.toContain('token=');
     expect(snapshot).toMatchObject({
       assetId: 'aapl-id',
       price: 190.25,
@@ -192,5 +229,42 @@ describe('market data providers', () => {
     const service = new MarketDataService(coingecko as never, {} as never);
 
     await expect(service.getLatestPrices([crypto])).resolves.toEqual([]);
+  });
+
+  it('retries a rate limit and a timeout without logging the request url', async () => {
+    const timeout = new Error('https://finnhub.io/api/v1/quote?token=secret');
+    timeout.name = 'TimeoutError';
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 429 })
+      .mockRejectedValueOnce(timeout)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      fetchMarketJson('finnhub', 'https://finnhub.io/api/v1/quote?token=secret', undefined, sleep),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThanOrEqual(200);
+    expect(sleep.mock.calls[0][0]).toBeLessThan(400);
+    expect(sleep.mock.calls[1][0]).toBeGreaterThanOrEqual(400);
+    expect(sleep.mock.calls[1][0]).toBeLessThan(800);
+  });
+
+  it('does not retry an unknown asset', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      fetchMarketJson('coingecko', 'https://api.coingecko.com/api/v3/coins/nope', undefined, sleep),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: 'coingecko request failed (404)',
+    });
+    expect(sleep).not.toHaveBeenCalled();
   });
 });

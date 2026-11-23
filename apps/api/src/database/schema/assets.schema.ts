@@ -1,4 +1,4 @@
-import { pgTable, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 
 import { assetStatusEnum, assetTypeEnum } from './enums';
 
@@ -21,6 +21,8 @@ export const assets = pgTable(
     }).notNull(),
 
     status: assetStatusEnum('status').notNull().default('ACTIVE'),
+
+    candlesSyncedAt: timestamp('candles_synced_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('assets_symbol_type_unique').on(table.symbol, table.assetType),

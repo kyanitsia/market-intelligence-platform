@@ -67,7 +67,7 @@ describe('Appendix A valuation', () => {
 
   it('computes current value, unrealized PnL, and allocation from avg_cost_basis', () => {
     const prices = new Map<string, CachedPrice>([
-      ['btc', { price: '15', asOf: now }],
+      ['btc', { price: '15', asOf: now, changePercent24h: '1.25', volume24h: '9' }],
       ['eth', { price: '80', asOf: now }],
     ]);
 
@@ -84,6 +84,8 @@ describe('Appendix A valuation', () => {
       costBasis: '20',
       unrealizedPnl: '10',
       unrealizedPnlPct: '50',
+      changePercent24h: '1.25',
+      volume24h: '9',
     });
     expect(valued.holdings[1].valuation).toMatchObject({
       currentValue: '80',

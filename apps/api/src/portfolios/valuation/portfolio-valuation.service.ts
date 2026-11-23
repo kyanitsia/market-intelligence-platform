@@ -131,6 +131,7 @@ export class PortfolioValuationService {
           externalProvider: row.asset.externalProvider,
           externalId: row.asset.externalId,
           status: row.asset.status,
+          candlesSyncedAt: null,
         });
       }
     }

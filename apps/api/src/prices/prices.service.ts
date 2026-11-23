@@ -3,80 +3,82 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { DATABASE, type Database } from '../database/database.types';
 import { assetPrices, type Asset } from '../database/schema';
-import type {
-  CachedPrice,
-  Currency,
-} from '../portfolios/valuation/valuation.types';
-import { MarketDataService } from './market-data/market-data.service';
+import type { CachedPrice, Currency } from '../portfolios/valuation/valuation.types';
+import type { PriceSnapshot } from './market-data/market-data';
+import { PriceCache } from './ingestion/price-cache';
 
 @Injectable()
 export class PricesService {
   constructor(
     @Inject(DATABASE)
     private readonly database: Database,
-    private readonly marketData: MarketDataService,
+    private readonly cache: PriceCache,
   ) {}
 
+  /**
+   * Latest quote for valuation. Reads Redis, then the last Postgres row.
+   * Never calls a market-data provider.
+   */
   async getLatestForAssets(
     assets: Asset[],
     currency: Currency,
-    staleAfterMs: number,
+    _staleAfterMs: number,
   ): Promise<Map<string, CachedPrice>> {
-    const latest = await this.loadCached(
-      assets.map((asset) => asset.id),
-      currency,
-    );
-    const now = Date.now();
-    // ponytail: refetches on the next read once the cached fetch is past the window
-    const due = assets.filter((asset) => {
-      const cached = latest.get(asset.id);
-
-      return !cached || now - cached.asOf.getTime() > staleAfterMs;
-    });
-
-    if (due.length === 0 || currency !== 'USD') {
-      return latest;
+    if (assets.length === 0) {
+      return new Map();
     }
 
-    const fetched = (await this.marketData.getLatestPrices(due)).flatMap(
-      (snapshot) => {
-        const price = priceToDecimal(snapshot.price);
-
-        if (!price) {
-          return [];
-        }
-
-        return [
-          {
-            assetId: snapshot.assetId,
-            price,
-            asOf: new Date(snapshot.fetchedAt),
-          },
-        ];
-      },
-    );
-
-    if (fetched.length === 0) {
-      return latest;
-    }
-
-    await this.upsert(
-      fetched.map((quote) => ({
-        assetId: quote.assetId,
+    if (currency !== 'USD') {
+      return this.loadStored(
+        assets.map((asset) => asset.id),
         currency,
-        price: quote.price,
-        asOf: quote.asOf,
-      })),
-    );
+      );
+    }
 
-    for (const quote of fetched) {
-      latest.set(quote.assetId, {
-        price: quote.price,
-        asOf: quote.asOf,
-      });
+    const cached = await this.cache.readMany(assets.map((asset) => asset.id));
+    const latest = new Map<string, CachedPrice>();
+
+    for (const asset of assets) {
+      const quote = fromSnapshot(cached.get(asset.id));
+
+      if (quote) {
+        latest.set(asset.id, quote);
+      }
+    }
+
+    const missing = assets
+      .filter((asset) => !latest.has(asset.id))
+      .map((asset) => asset.id);
+    const stored = await this.loadStored(missing, 'USD');
+
+    for (const [assetId, quote] of stored) {
+      latest.set(assetId, quote);
     }
 
     return latest;
+  }
+
+  async remember(snapshot: PriceSnapshot): Promise<void> {
+    const price = decimalOrNull(snapshot.price);
+
+    if (!price || price.startsWith('-')) {
+      return;
+    }
+
+    const asOf = new Date(snapshot.fetchedAt);
+
+    if (Number.isNaN(asOf.getTime())) {
+      return;
+    }
+
+    await this.upsert([
+      {
+        assetId: snapshot.assetId,
+        currency: snapshot.currency,
+        price,
+        asOf,
+      },
+    ]);
   }
 
   async upsert(
@@ -103,7 +105,7 @@ export class PricesService {
       });
   }
 
-  private async loadCached(
+  private async loadStored(
     assetIds: string[],
     currency: Currency,
   ): Promise<Map<string, CachedPrice>> {
@@ -138,10 +140,36 @@ export class PricesService {
   }
 }
 
-function priceToDecimal(price: number): string | null {
-  if (!Number.isFinite(price) || price < 0) {
+function fromSnapshot(
+  snapshot: (PriceSnapshot & { stale?: boolean }) | undefined,
+): CachedPrice | null {
+  if (!snapshot) {
     return null;
   }
 
-  return price.toFixed(12).replace(/\.?0+$/, '') || '0';
+  const price = decimalOrNull(snapshot.price);
+  const asOf = new Date(snapshot.fetchedAt);
+
+  if (!price || price.startsWith('-') || Number.isNaN(asOf.getTime())) {
+    return null;
+  }
+
+  return {
+    price,
+    asOf,
+    change24h: decimalOrNull(snapshot.change24h),
+    changePercent24h: decimalOrNull(snapshot.changePercent24h),
+    volume24h: decimalOrNull(snapshot.volume24h),
+    high24h: decimalOrNull(snapshot.high24h),
+    low24h: decimalOrNull(snapshot.low24h),
+  };
+}
+
+function decimalOrNull(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  const text = Math.abs(value).toFixed(12).replace(/\.?0+$/, '') || '0';
+  return value < 0 ? `-${text}` : text;
 }
